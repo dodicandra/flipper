@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -10,13 +10,7 @@
 import React, {CSSProperties, forwardRef} from 'react';
 import styled from '@emotion/styled';
 import {Container} from './Container';
-import {
-  normalizePadding,
-  normalizeSpace,
-  PaddingProps,
-  Spacing,
-  theme,
-} from './theme';
+import {PaddingProps, Spacing} from './theme';
 
 import {renderSplitLayout} from './renderSplitLayout';
 

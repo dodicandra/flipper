@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -34,16 +34,30 @@ const argv = yargs
   .usage('$0 [args]')
   .options({
     device: {
-      describe: 'The device name to listen to',
+      describe: 'The device name or serial/udid to listen to',
       type: 'string',
+      demandOption: true,
     },
     client: {
       describe: 'The application name to listen to',
       type: 'string',
+      demandOption: true,
     },
     plugin: {
       describe: 'Plugin id to listen to',
       type: 'string',
+      demandOption: true,
+    },
+    settingsString: {
+      describe: `override the existing defaults settings of flipper (settings.json file) e.g "{"androidHome":"/usr/local/bin","enableAndroid":true}"`,
+      type: 'string',
+      default: '',
+    },
+    launcherSettings: {
+      describe:
+        'Open Flipper with the configuration stored in .config folder for the launcher',
+      type: 'boolean',
+      default: true,
     },
     // TODO: support filtering events
     // TODO: support verbose mode
@@ -54,7 +68,7 @@ const argv = yargs
   // .strict()
   .parse(process.argv.slice(1));
 
-async function start(deviceTitle: string, appName: string, pluginId: string) {
+async function start(deviceQuery: string, appName: string, pluginId: string) {
   return new Promise(async (_resolve, reject) => {
     const staticPath = path.resolve(__dirname, '..', '..', 'static');
     let device: DeviceDescription | undefined;
@@ -87,16 +101,16 @@ async function start(deviceTitle: string, appName: string, pluginId: string) {
           execPath: process.execPath,
           desktopPath: `/dev/null`,
         },
-        launcherSettings: await loadLauncherSettings(),
+        launcherSettings: await loadLauncherSettings(argv.launcherSettings),
         processConfig: loadProcessConfig(process.env),
-        settings: await loadSettings(),
+        settings: await loadSettings(argv.settingsString),
         validWebSocketOrigins: [],
       },
       logger,
     );
 
     logger.info(
-      `Waiting for device '${deviceTitle}' client '${appName}' plugin '${pluginId}' ...`,
+      `Waiting for device '${deviceQuery}' client '${appName}' plugin '${pluginId}' ...`,
     );
 
     server.on('notification', ({type, title, description}) => {
@@ -106,13 +120,22 @@ async function start(deviceTitle: string, appName: string, pluginId: string) {
     });
 
     server.on('server-error', reject);
+    server.on('server-state', ({state, error}) => {
+      if (state === 'error') {
+        reject(error);
+      }
+    });
 
     server.on('device-connected', (deviceInfo) => {
       logger.info(
         `Detected device [${deviceInfo.os}] ${deviceInfo.title} ${deviceInfo.serial}`,
       );
-      if (deviceInfo.title === deviceTitle) {
-        logger.info('Device matched');
+      if (deviceInfo.serial == deviceQuery) {
+        logger.info(`Device matched on device serial ${deviceQuery}`);
+        device = deviceInfo;
+        deviceResolver();
+      } else if (deviceInfo.title === deviceQuery) {
+        logger.info(`Device matched on device title ${deviceQuery}`);
         device = deviceInfo;
         deviceResolver();
       }
@@ -245,18 +268,6 @@ function createLogger(): Logger {
   };
 }
 
-if (!argv.device) {
-  console.error('--device not specified');
-  process.exit(1);
-}
-if (!argv.client) {
-  console.error('--client not specified');
-  process.exit(1);
-}
-if (!argv.plugin) {
-  console.error('--plugin not specified');
-  process.exit(1);
-}
 start(argv.device!, argv.client!, argv.plugin!).catch((e) => {
   // eslint-disable-next-line
   console.error(e);

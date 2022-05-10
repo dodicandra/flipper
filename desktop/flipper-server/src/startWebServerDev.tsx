@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -12,17 +12,12 @@ import {Express} from 'express';
 import http from 'http';
 import path from 'path';
 import fs from 'fs-extra';
-import socketio from 'socket.io';
-import {getWatchFolders} from 'flipper-pkg-lib';
-import Metro from 'metro';
+import {WebSocketServer} from 'ws';
 import pFilter from 'p-filter';
-// provided by Metro
-// eslint-disable-next-line
-import MetroResolver from 'metro-resolver';
 import {homedir} from 'os';
 
 // This file is heavily inspired by scripts/start-dev-server.ts!
-// part of that is done by start-flipper-server (compiling "main"),
+// part of that is done by start-flipper-server-dev (compiling "main"),
 // the other part ("renderer") here.
 
 const uiSourceDirs = [
@@ -56,9 +51,14 @@ export async function getPluginSourceFolders(): Promise<string[]> {
 export async function startWebServerDev(
   app: Express,
   server: http.Server,
-  socket: socketio.Server,
+  socket: WebSocketServer,
   rootDir: string,
 ) {
+  // prevent bundling!
+  const Metro = electronRequire('metro');
+  const MetroResolver = electronRequire('metro-resolver');
+  const {getWatchFolders} = electronRequire('flipper-pkg-lib');
+
   const babelTransformationsDir = path.resolve(
     rootDir,
     'babel-transformer',
@@ -108,6 +108,11 @@ export async function startWebServerDev(
         if (moduleName === 'flipper') {
           return MetroResolver.resolve(context, 'flipper-ui-core', ...rest);
         }
+        // stubbed modules are modules that don't make sense outside a Node / Electron context,
+        // like fs, child_process etc etc.
+        // UI / plugins using these features should use the corresponding RenderHost api's instead
+        // Ideally we'd fail hard on those, but not all plugins are properly converted yet, and some
+        // libraries try to require them for feature detection (e.g. jsbase64)
         if (stubModules.has(moduleName)) {
           console.warn(
             `Found a reference to built-in module '${moduleName}', which will be stubbed out. Referer: ${context.originModulePath}`,
@@ -133,7 +138,11 @@ export async function startWebServerDev(
   connectMiddleware.attachHmrServer(server);
   app.use(function (err: any, _req: any, _res: any, next: any) {
     console.error(chalk.red('\n\nCompile error in client bundle\n'), err);
-    socket.local.emit('hasErrors', err.toString());
+    socket.clients.forEach((client) => {
+      client.send(
+        JSON.stringify({event: 'hasErrors', payload: err.toString()}),
+      );
+    });
     next();
   });
 

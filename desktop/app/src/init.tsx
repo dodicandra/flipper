@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -16,7 +16,6 @@ import {
 } from 'flipper-plugin';
 // eslint-disable-next-line no-restricted-imports,flipper/no-electron-remote-imports
 import {remote} from 'electron';
-import type {RenderHost} from 'flipper-ui-core';
 import os from 'os';
 import {
   FlipperServerImpl,
@@ -38,7 +37,7 @@ import {
 import constants from './fb-stubs/constants';
 import {initializeElectron} from './electron/initializeElectron';
 import path from 'path';
-import fs from 'fs';
+import fs from 'fs-extra';
 
 enableMapSet();
 
@@ -65,9 +64,17 @@ async function start() {
   let keytar: any = undefined;
   try {
     if (!isTest()) {
-      keytar = electronRequire(
-        path.join(appPath, 'native-modules', `keytar-${process.platform}.node`),
+      const keytarPath = path.join(
+        staticPath,
+        'native-modules',
+        `keytar-${process.platform}-${process.arch}.node`,
       );
+      if (!(await fs.pathExists(keytarPath))) {
+        throw new Error(
+          `Keytar binary does not exist for platform ${process.platform}-${process.arch}`,
+        );
+      }
+      keytar = electronRequire(keytarPath);
     }
   } catch (e) {
     console.error('Failed to load keytar:', e);
@@ -96,7 +103,6 @@ async function start() {
     keytar,
   );
 
-  await flipperServer.connect();
   const flipperServerConfig = await flipperServer.exec('get-config');
 
   initializeElectron(flipperServer, flipperServerConfig);
@@ -109,6 +115,8 @@ async function start() {
   // but not set yet, which might happen when using normal imports.
   // eslint-disable-next-line import/no-commonjs
   require('flipper-ui-core').startFlipperDesktop(flipperServer);
+
+  await flipperServer.connect();
 
   // Initialize launcher
   setupPrefetcher(flipperServerConfig.settings);

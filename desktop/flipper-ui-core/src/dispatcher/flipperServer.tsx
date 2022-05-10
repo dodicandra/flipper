@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -15,6 +15,7 @@ import {
   NoLongerConnectedToClientError,
   isTest,
   DeviceDescription,
+  FlipperServerState,
 } from 'flipper-common';
 import Client from '../Client';
 import {notification} from 'antd';
@@ -30,7 +31,7 @@ export function connectFlipperServerToStore(
   logger: Logger,
 ) {
   server.on('notification', ({type, title, description}) => {
-    const text = `[$type] ${title}: ${description}`;
+    const text = `[${type}] ${title}: ${description}`;
     console.warn(text);
     notification.open({
       message: title,
@@ -41,9 +42,11 @@ export function connectFlipperServerToStore(
     });
   });
 
+  server.on('server-state', handleServerStateChange);
+
   server.on('server-error', (err) => {
     notification.error({
-      message: 'Failed to start connection server',
+      message: 'Connection error',
       description:
         err.code === 'EADDRINUSE' ? (
           <>
@@ -59,7 +62,7 @@ export function connectFlipperServerToStore(
             {'' + err}
           </>
         ) : (
-          <>Failed to start Flipper server: {err.message ?? err}</>
+          <>{err.message ?? err}</>
         ),
       duration: null,
     });
@@ -112,6 +115,13 @@ export function connectFlipperServerToStore(
   console.log(
     'Flipper server started and accepting device / client connections',
   );
+
+  server
+    .exec('get-server-state')
+    .then(handleServerStateChange)
+    .catch((e) => {
+      console.error(`Failed to get initial server state`, e);
+    });
 
   // this flow is spawned delibarately from this main flow
   waitFor(store, (state) => state.plugins.initialized)
@@ -173,6 +183,25 @@ function startSideEffects(store: Store, server: FlipperServer) {
   };
 }
 
+function handleServerStateChange({
+  state,
+  error,
+}: {
+  state: FlipperServerState;
+  error?: string;
+}) {
+  if (state === 'error') {
+    console.warn(`[conn] Flipper server state -> ${state}`, error);
+    notification.error({
+      message: 'Failed to start flipper-server',
+      description: '' + error,
+      duration: null,
+    });
+  } else {
+    console.info(`[conn] Flipper server state -> ${state}`);
+  }
+}
+
 function handleDeviceConnected(
   server: FlipperServer,
   store: Store,
@@ -211,7 +240,7 @@ function handleDeviceConnected(
 }
 
 export async function handleClientConnected(
-  server: Pick<FlipperServer, 'exec'>,
+  server: FlipperServer,
   store: Store,
   logger: Logger,
   {id, query}: ClientDescription,
@@ -241,7 +270,7 @@ export async function handleClientConnected(
     getDeviceBySerial(store.getState(), query.device_id) ??
     (await findDeviceForConnection(store, query.app, query.device_id).catch(
       (e) => {
-        console.error(
+        console.warn(
           `[conn] Failed to find device '${query.device_id}' while connection app '${query.app}'`,
           e,
         );
@@ -272,6 +301,7 @@ export async function handleClientConnected(
     store,
     undefined,
     device,
+    server,
   );
 
   console.debug(

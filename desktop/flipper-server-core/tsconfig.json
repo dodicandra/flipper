@@ -19,7 +19,13 @@
       "path": "../flipper-common"
     },
     {
+      "path": "../flipper-plugin"
+    },
+    {
       "path": "../plugin-lib"
+    },
+    {
+      "path": "../pkg-lib"
     }
   ]
 }

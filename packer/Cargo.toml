@@ -5,21 +5,21 @@ license = "MIT"
 repository = "https://github.com/facebook/flipper.git"
 keywords = ["flipper", "cli"]
 categories = ["development-tools"]
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Facebook, Inc."]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
-clap = "2.34.0"
-shellexpand = "2.1.0"
-tar = "0.4.37"
-serde = { version = "1.0.132", features = ["derive"] }
-serde_yaml = "0.8.21"
-anyhow = "1.0.51"
-sha2 = "0.10.0"
-data-encoding = "2.3.2"
-serde_json = "1.0.67"
-rayon = "1.5.1"
+clap = { version = "^3", features = ["derive", "cargo"] }
+shellexpand = "^2"
+tar = "0.4.38"
+serde = { version = "^1", features = ["derive"] }
+serde_yaml = "0.8.23"
+anyhow = "^1"
+sha2 = "0.10.2"
+data-encoding = "^2"
+serde_json = "^1"
+rayon = "^1.5"
 indicatif = "^0.15"
 xz2 = "0.1.6"
 ignore = "0.4.18"

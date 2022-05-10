@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -190,6 +190,11 @@ export class FlipperClient {
   }
 
   stop() {
+    if (this.reconnectionTimer) {
+      clearTimeout(this.reconnectionTimer);
+      this.reconnectionTimer = undefined;
+    }
+
     if (!this.ws) {
       return;
     }
@@ -214,8 +219,9 @@ export class FlipperClient {
 
   private connectToFlipper() {
     const url = `ws://${this.urlBase}?device_id=${this.device}${this.devicePseudoId}&device=${this.device}&app=${this.appName}&os=${this.os}`;
+    const encodedUrl = encodeURI(url);
 
-    this.ws = this.websocketFactory(url);
+    this.ws = this.websocketFactory(encodedUrl);
 
     this.ws.onerror = (error) => {
       this.onError(error);

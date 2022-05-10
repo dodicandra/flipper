@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -54,7 +54,7 @@ module.exports = {
               'getting-started/react-native-ios',
             ],
           },
-          'getting-started/javascript'
+          'getting-started/javascript',
         ],
       },
       ...fbInternalOnly(['getting-started/fb/connecting-to-flipper']),
@@ -108,12 +108,14 @@ module.exports = {
     'Desktop plugin APIs': [
       'extending/flipper-plugin',
       'extending/styling-components',
+      'extending/style-guide',
       'extending/deeplinks',
+      'extending/node-apis',
       ...fbInternalOnly([
         {
           'QPL linting': ['fb/building-a-linter', 'fb/active-linters'],
         },
-      ]),      
+      ]),
     ],
     'Client plugin APIs': [
       'extending/create-plugin',
@@ -129,6 +131,7 @@ module.exports = {
       'extending/public-releases',
       'extending/testing-rn',
       'internals/linters',
+      'internals/device-identifiers',
       ...fbInternalOnly([
         'fb/release-infra',
         'fb/LauncherConfig',
@@ -138,7 +141,6 @@ module.exports = {
         'fb/Add-Support-Group-to-Flipper-Support-Form',
         'fb/Alerts',
         'fb/bundling',
-        'fb/Certificate-Exchange-Diagram',
         'fb/Electron-Upgrade',
         'fb/flipper-analytics',
         'fb/Navigation-Plugin-Development-Guide',
@@ -149,6 +151,7 @@ module.exports = {
         'fb/error-logging',
         'fb/scribe',
         'fb/async-testing',
+        'fb/connections',
       ]),
     ],
   },

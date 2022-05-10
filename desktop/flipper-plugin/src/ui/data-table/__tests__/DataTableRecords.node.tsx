@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -47,13 +47,13 @@ test('update and append', async () => {
         class="ant-dropdown-trigger css-1k3kr6b-TableBodyRowContainer e1luu51r1"
       >
         <div
-          class="css-9bipfg-TableBodyColumnContainer e1luu51r0"
+          class="css-1baxqcf-TableBodyColumnContainer e1luu51r0"
           width="50%"
         >
           test DataTable
         </div>
         <div
-          class="css-9bipfg-TableBodyColumnContainer e1luu51r0"
+          class="css-1baxqcf-TableBodyColumnContainer e1luu51r0"
           width="50%"
         >
           true

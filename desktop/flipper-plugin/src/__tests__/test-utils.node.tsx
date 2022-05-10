@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -354,6 +354,9 @@ test('plugins can handle import errors', async () => {
         Array [
           "An error occurred when importing data for plugin 'TestPlugin': 'Error: Oops",
           [Error: Oops],
+        ],
+        Array [
+          "Warning: ReactDOM.render is no longer supported in React 18. Use createRoot instead. Until you switch to the new API, your app will behave as if it's running React 17. Learn more: https://reactjs.org/link/switch-to-createroot",
         ],
       ]
     `);

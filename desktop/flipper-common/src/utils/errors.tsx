@@ -1,11 +1,13 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
  * @format
  */
+
+import {ClientErrorType} from '../server-types';
 
 export function isAuthError(
   err: any,
@@ -26,6 +28,14 @@ export function isConnectivityOrAuthError(
     // underlying core issue is still a fetch failure.
     String(err).endsWith('Failed to fetch')
   );
+}
+
+export class UnableToExtractClientQueryError extends Error {
+  constructor(msg: string) {
+    super(msg);
+    this.name = 'UnableToExtractClientQueryError';
+  }
+  name: 'UnableToExtractClientQueryError';
 }
 
 export class CancelledPromiseError extends Error {
@@ -114,3 +124,10 @@ export function getStringFromErrorLike(e: any): string {
     }
   }
 }
+
+export const deserializeRemoteError = (serializedError: ClientErrorType) => {
+  const err = new Error(serializedError.message);
+  err.name = serializedError.name;
+  err.stack += `. Caused by: ${serializedError.stacktrace}`;
+  return err;
+};

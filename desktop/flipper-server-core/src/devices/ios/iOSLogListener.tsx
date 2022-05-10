@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -61,6 +61,7 @@ type RawLogEntry = {
 // Mar 25 17:06:38 iPhone symptomsd(SymptomEvaluator)[125] <Notice>: Stuff
 const logRegex = /(^.{15}) ([^ ]+?) ([^\[]+?)\[(\d+?)\] <(\w+?)>: (.*)$/s;
 
+// eslint-disable-next-line @typescript-eslint/naming-convention
 export class iOSLogListener extends DeviceListener {
   constructor(
     isDeviceConnected: () => boolean,

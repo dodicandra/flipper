@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -11,7 +11,6 @@ import adb, {Client as ADBClient, PullTransfer} from 'adbkit';
 import {Reader} from 'adbkit-logcat';
 import {createWriteStream} from 'fs';
 import type {DeviceType} from 'flipper-common';
-import which from 'which';
 import {spawn} from 'child_process';
 import {dirname, join} from 'path';
 import {DeviceSpec} from 'flipper-common';
@@ -49,6 +48,10 @@ export default class AndroidDevice extends ServerDevice {
       specs,
       abiList,
       sdkVersion,
+      features: {
+        screenCaptureAvailable: false,
+        screenshotAvailable: false,
+      },
     });
     this.adb = adb;
 
@@ -88,7 +91,9 @@ export default class AndroidDevice extends ServerDevice {
   }
 
   clearLogs(): Promise<void> {
-    return this.executeShellOrDie(['logcat', '-c']);
+    return this.executeShellOrDie(['logcat', '-c']).catch((e) => {
+      console.warn('Failed to clear logs:', e);
+    });
   }
 
   async navigateToLocation(location: string) {
@@ -115,7 +120,38 @@ export default class AndroidDevice extends ServerDevice {
     });
   }
 
-  async screenCaptureAvailable(): Promise<boolean> {
+  async setIntoPermissiveMode(): Promise<void> {
+    console.debug('AndroidDevice.setIntoPermissiveMode', this.serial);
+    try {
+      try {
+        await this.adb.root(this.serial);
+      } catch (e) {
+        if (
+          !(e instanceof Error) ||
+          e.message !== 'adbd is already running as root'
+        ) {
+          throw e;
+        }
+      }
+      console.debug(
+        'AndroidDevice.setIntoPermissiveMode -> enabled root',
+        this.serial,
+      );
+      await this.executeShellOrDie('setenforce 0');
+      console.info(
+        'AndroidDevice.setIntoPermissiveMode -> success',
+        this.serial,
+      );
+    } catch (e) {
+      console.info(
+        'AndroidDevice.setIntoPermissiveMode -> failed',
+        this.serial,
+        e,
+      );
+    }
+  }
+
+  async screenRecordAvailable(): Promise<boolean> {
     try {
       await this.executeShellOrDie(
         `[ ! -f /system/bin/screenrecord ] && echo "File does not exist"`,

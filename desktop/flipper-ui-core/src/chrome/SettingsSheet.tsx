@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -18,7 +18,11 @@ import {connect} from 'react-redux';
 import {State as Store} from '../reducers';
 import {flush} from '../utils/persistor';
 import ToggledSection from './settings/ToggledSection';
-import {FilePathConfigField, ConfigText} from './settings/configFields';
+import {
+  FilePathConfigField,
+  ConfigText,
+  URLConfigField,
+} from './settings/configFields';
 import KeyboardShortcutInput from './settings/KeyboardShortcutInput';
 import {isEqual, isMatch, isEmpty} from 'lodash';
 import LauncherSettingsPanel from '../fb-stubs/LauncherSettingsPanel';
@@ -27,9 +31,15 @@ import {
   Platform,
   reportUsage,
   Settings,
+  sleep,
 } from 'flipper-common';
 import {Modal, message, Button} from 'antd';
-import {Layout, withTrackingScope, _NuxManagerContext} from 'flipper-plugin';
+import {
+  Layout,
+  withTrackingScope,
+  _NuxManagerContext,
+  NUX,
+} from 'flipper-plugin';
 import {getRenderHostInstance} from '../RenderHost';
 import {loadTheme} from '../utils/loadTheme';
 
@@ -73,9 +83,9 @@ class SettingsSheet extends Component<Props, State> {
     this.props.updateSettings(this.state.updatedSettings);
     this.props.updateLauncherSettings(this.state.updatedLauncherSettings);
     this.props.onHide();
-    return flush().then(() => {
-      getRenderHostInstance().restartFlipper(true);
-    });
+    await flush();
+    await sleep(1000);
+    getRenderHostInstance().restartFlipper(true);
   };
 
   applyChangesWithoutRestart = async () => {
@@ -92,12 +102,13 @@ class SettingsSheet extends Component<Props, State> {
     return (
       <Modal
         visible
+        centered
         onCancel={this.props.onHide}
         width={570}
         title="Settings"
         footer={footer}
         bodyStyle={{
-          overflow: 'scroll',
+          overflow: 'auto',
           maxHeight: 'calc(100vh - 250px)',
         }}>
         {contents}
@@ -116,6 +127,9 @@ class SettingsSheet extends Component<Props, State> {
       reactNative,
       darkMode,
       suppressPluginErrors,
+      enablePluginMarketplace,
+      enablePluginMarketplaceAutoUpdate,
+      marketplaceURL,
     } = this.state.updatedSettings;
 
     const settingsPristine =
@@ -322,6 +336,51 @@ class SettingsSheet extends Component<Props, State> {
             }}
           />
         </ToggledSection>
+        <NUX
+          // TODO: provide link to Flipper doc with more details
+          title="Plugin marketplace serve as a way to distribute private/internal plugins"
+          placement="right">
+          <ToggledSection
+            label="Enable plugin marketplace"
+            toggled={enablePluginMarketplace}
+            frozen={false}
+            onChange={(v) => {
+              this.setState({
+                updatedSettings: {
+                  ...this.state.updatedSettings,
+                  enablePluginMarketplace: v,
+                },
+              });
+            }}>
+            <URLConfigField
+              label="Martkeplace URL"
+              defaultValue={
+                marketplaceURL || 'http://plugin-marketplace.local/get-plugins'
+              }
+              onChange={(v) => {
+                this.setState({
+                  updatedSettings: {
+                    ...this.state.updatedSettings,
+                    marketplaceURL: v,
+                  },
+                });
+              }}
+            />
+            <ToggledSection
+              label="Enable auto update"
+              toggled={enablePluginMarketplaceAutoUpdate}
+              frozen={false}
+              onChange={(v) => {
+                this.setState({
+                  updatedSettings: {
+                    ...this.state.updatedSettings,
+                    enablePluginMarketplaceAutoUpdate: v,
+                  },
+                });
+              }}
+            />
+          </ToggledSection>
+        </NUX>
         <Layout.Right center>
           <span>Reset all new user tooltips</span>
           <ResetTooltips />

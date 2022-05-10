@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -53,10 +53,11 @@ import {debounce} from 'lodash';
 import {useInUnitTest} from '../../utils/useInUnitTest';
 import {createDataSource} from '../../state/createDataSource';
 
-interface DataTableBaseProps<T = any> {
+type DataTableBaseProps<T = any> = {
   columns: DataTableColumn<T>[];
   enableSearchbar?: boolean;
   enableAutoScroll?: boolean;
+  enableHorizontalScroll?: boolean;
   enableColumnHeaders?: boolean;
   enableMultiSelect?: boolean;
   enableContextMenu?: boolean;
@@ -72,7 +73,7 @@ interface DataTableBaseProps<T = any> {
   onRenderEmpty?:
     | null
     | ((dataSource?: DataSource<T, T[keyof T]>) => React.ReactElement);
-}
+};
 
 export type ItemRenderer<T> = (
   item: T,
@@ -144,7 +145,7 @@ export function DataTable<T extends object>(
   const isUnitTest = useInUnitTest();
 
   // eslint-disable-next-line
-  const scope = isUnitTest ? '' : usePluginInstanceMaybe()?.pluginKey ?? '';
+  const scope = isUnitTest ? '' : usePluginInstanceMaybe()?.definition.id ?? '';
   const virtualizerRef = useRef<DataSourceVirtualizer | undefined>();
   const [tableState, dispatch] = useReducer(
     dataTableManagerReducer as DataTableReducer<T>,
@@ -307,6 +308,9 @@ export function DataTable<T extends object>(
         case 'Escape':
           tableManager.clearSelection();
           break;
+        case 'Control':
+          tableManager.setSelectedSearchRecord();
+          break;
         default:
           handled = false;
       }
@@ -347,7 +351,9 @@ export function DataTable<T extends object>(
     [
       tableState.searchValue,
       tableState.useRegex,
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       ...tableState.columns.map((c) => c.filters),
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       ...tableState.columns.map((c) => c.inversed),
     ],
   );
@@ -472,6 +478,30 @@ export function DataTable<T extends object>(
     // eslint-disable-next-line
   }, []);
 
+  useEffect(
+    function findMappedIndex() {
+      // Hardcoded delay to give dataSource.view time to update, otherwise
+      // the entries we loop over here won't be the list of unfiltered records
+      // the user sees, so there won't be a match found
+      const delay = 300;
+
+      if (tableState.selectedSearchRecord) {
+        const timer = setTimeout(() => {
+          for (let i = 0; i < dataSource.view.size; i++) {
+            if (dataSource.view.get(i) === tableState.selectedSearchRecord) {
+              tableManager.clearSelectedSearchRecord();
+              tableManager.selectItem(i, false, true);
+              break;
+            }
+          }
+        }, delay);
+
+        return () => clearTimeout(timer);
+      }
+    },
+    [dataSource, selection, tableManager, tableState.selectedSearchRecord],
+  );
+
   const header = (
     <Layout.Container>
       {props.enableSearchbar && (
@@ -483,6 +513,10 @@ export function DataTable<T extends object>(
           extraActions={props.extraActions}
         />
       )}
+    </Layout.Container>
+  );
+  const columnHeaders = (
+    <Layout.Container>
       {props.enableColumnHeaders && (
         <TableHead
           visibleColumns={visibleColumns}
@@ -502,9 +536,9 @@ export function DataTable<T extends object>(
     props.onRenderEmpty === undefined
       ? props.onRenderEmpty
       : props.onRenderEmpty;
-  const mainSection = props.scrollable ? (
-    <Layout.Top>
-      {header}
+  let mainSection: JSX.Element;
+  if (props.scrollable) {
+    const dataSourceRenderer = (
       <DataSourceRendererVirtual<T, TableRowRenderContext<T>>
         dataSource={dataSource}
         autoScroll={tableState.autoScroll && !dragging.current}
@@ -518,21 +552,44 @@ export function DataTable<T extends object>(
         onUpdateAutoScroll={onUpdateAutoScroll}
         emptyRenderer={emptyRenderer}
       />
-    </Layout.Top>
-  ) : (
-    <Layout.Container>
-      {header}
-      <DataSourceRendererStatic<T, TableRowRenderContext<T>>
-        dataSource={dataSource}
-        useFixedRowHeight={!tableState.usesWrapping}
-        defaultRowHeight={DEFAULT_ROW_HEIGHT}
-        context={renderingConfig}
-        itemRenderer={itemRenderer}
-        onKeyDown={onKeyDown}
-        emptyRenderer={emptyRenderer}
-      />
-    </Layout.Container>
-  );
+    );
+
+    mainSection = props.enableHorizontalScroll ? (
+      <Layout.Top>
+        {header}
+        <Layout.ScrollContainer horizontal vertical={false}>
+          <Layout.Top>
+            {columnHeaders}
+            {dataSourceRenderer}
+          </Layout.Top>
+        </Layout.ScrollContainer>
+      </Layout.Top>
+    ) : (
+      <Layout.Top>
+        <div>
+          {header}
+          {columnHeaders}
+        </div>
+        {dataSourceRenderer}
+      </Layout.Top>
+    );
+  } else {
+    mainSection = (
+      <Layout.Container>
+        {header}
+        {columnHeaders}
+        <DataSourceRendererStatic<T, TableRowRenderContext<T>>
+          dataSource={dataSource}
+          useFixedRowHeight={!tableState.usesWrapping}
+          defaultRowHeight={DEFAULT_ROW_HEIGHT}
+          context={renderingConfig}
+          itemRenderer={itemRenderer}
+          onKeyDown={onKeyDown}
+          emptyRenderer={emptyRenderer}
+        />
+      </Layout.Container>
+    );
+  }
 
   return (
     <Layout.Container grow={props.scrollable}>
@@ -558,9 +615,11 @@ DataTable.defaultProps = {
   scrollable: true,
   enableSearchbar: true,
   enableAutoScroll: false,
+  enableHorizontalScroll: true,
   enableColumnHeaders: true,
   enableMultiSelect: true,
   enableContextMenu: true,
+  enablePersistSettings: true,
   onRenderEmpty: emptyRenderer,
 } as Partial<DataTableProps<any>>;
 

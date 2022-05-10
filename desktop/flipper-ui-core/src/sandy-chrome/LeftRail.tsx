@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -97,16 +97,8 @@ export function LeftRailButton({
   title?: string;
   onClick?: React.MouseEventHandler<HTMLElement>;
 }) {
-  let iconElement =
+  const iconElement =
     icon && cloneElement(icon, {style: {fontSize: small ? 16 : 24}});
-  if (count !== undefined) {
-    iconElement =
-      count === true ? (
-        <Badge dot>{iconElement}</Badge>
-      ) : (
-        <Badge count={count}>{iconElement}</Badge>
-      );
-  }
 
   let res = (
     <LeftRailButtonElem
@@ -122,6 +114,19 @@ export function LeftRailButton({
       }}
     />
   );
+
+  if (count !== undefined) {
+    res =
+      count === true ? (
+        <Badge dot offset={[-8, 8]} {...{onClick}}>
+          {res}
+        </Badge>
+      ) : (
+        <Badge count={count} offset={[-6, 5]} {...{onClick}}>
+          {res}
+        </Badge>
+      );
+  }
 
   if (title) {
     res = (
@@ -248,7 +253,11 @@ function ExtrasMenu() {
       <NUX
         title="Find import, export, deeplink, feedback, settings, and help (welcome) here"
         placement="right">
-        <Menu mode="vertical" className={menu} selectable={false}>
+        <Menu
+          mode="vertical"
+          className={menu}
+          selectable={false}
+          style={{backgroundColor: theme.backgroundDefault}}>
           <SubMenu
             popupOffset={[10, 0]}
             key="extras"

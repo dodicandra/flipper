@@ -1,3 +1,83 @@
+# 0.145.0 (5/5/2022)
+
+ * [D36001637](https://github.com/facebook/flipper/search?q=D36001637&type=Commits) -  Execute :third-party:prepare before :configureCMake task on Android
+
+
+# 0.144.0 (27/4/2022)
+
+ * [D35810827](https://github.com/facebook/flipper/search?q=D35810827&type=Commits) -  Fixes an issue on the databases plugin when there is no selected database.
+
+
+# 0.143.0 (20/4/2022)
+
+ * [D35546817](https://github.com/facebook/flipper/search?q=D35546817&type=Commits) -  Check if there's a process listening at the specified port before attempting to establish a websocket connection on iOS
+ * [D35548148](https://github.com/facebook/flipper/search?q=D35548148&type=Commits) -  Certificate signing request response to be processed on the right event loop.
+
+
+# 0.141.0 (30/3/2022)
+
+ * [D34990372](https://github.com/facebook/flipper/search?q=D34990372&type=Commits) -  Add view preview/snapshot for the Layout plugin on iOS.
+ * [D35009246](https://github.com/facebook/flipper/search?q=D35009246&type=Commits) -  Add view preview/snapshot for the Layout plugin on Android.
+
+
+# 0.140.0 (23/3/2022)
+
+ * [D34932896](https://github.com/facebook/flipper/search?q=D34932896&type=Commits) -  Make it possible to recover from malformed JSON in server requests
+ * [D34932895](https://github.com/facebook/flipper/search?q=D34932895&type=Commits) -  Respect --no-open during server startup
+
+
+# 0.138.0 (9/3/2022)
+
+ * [D34627820](https://github.com/facebook/flipper/search?q=D34627820&type=Commits) -  Add Support Ukraine banner to website
+
+
+# 0.137.0 (2/3/2022)
+
+ * [D34418118](https://github.com/facebook/flipper/search?q=D34418118&type=Commits) -  Remove rsocket references from xplat
+ * [D33656299](https://github.com/facebook/flipper/search?q=D33656299&type=Commits) -  Remove rsocket dependency for iOS
+ * [D34418565](https://github.com/facebook/flipper/search?q=D34418565&type=Commits) -  Remove rsocket dependency for Android
+
+
+# 0.136.0 (23/2/2022)
+
+ * [D34340068](https://github.com/facebook/flipper/search?q=D34340068&type=Commits) -  Log 'Unable to extract the client query from the request URL' as warning
+ * [D34345316](https://github.com/facebook/flipper/search?q=D34345316&type=Commits) -  Remove RSocket documentation references
+
+
+# 0.135.0 (16/2/2022)
+
+ * [D33655430](https://github.com/facebook/flipper/search?q=D33655430&type=Commits) -  Removes rsocket-fallback for mobile clients
+
+
+# 0.134.0 (14/2/2022)
+
+ * [D34143349](https://github.com/facebook/flipper/search?q=D34143349&type=Commits) -  Consume openssl from maven (prefab)
+
+
+# 0.133.0 (9/2/2022)
+
+ * [D33976028](https://github.com/facebook/flipper/search?q=D33976028&type=Commits) -  Fixed 'device still authorizing' errors showing up while connecting to an Android device
+ * [D33976460](https://github.com/facebook/flipper/search?q=D33976460&type=Commits) -  Don't show errors for clients that fail to connect in a timely fashion repeatedly.
+ * [D34080726](https://github.com/facebook/flipper/search?q=D34080726&type=Commits) -  Release an existing client before attempting a secure connection
+
+
+# 0.132.0 (2/2/2022)
+
+ * [D33890235](https://github.com/facebook/flipper/search?q=D33890235&type=Commits) -  Fallback to RSockets if cert exchange fails even if the connection was successful.
+
+
+# 0.128.0 (12/1/2022)
+
+ * [D33348923](https://github.com/facebook/flipper/search?q=D33348923&type=Commits) -  More clearly communicate if flipper server failed to start (e.d. due to port already taken, openssl not being available)
+ * [D33364781](https://github.com/facebook/flipper/search?q=D33364781&type=Commits) -  Improved column widths in data tables
+ * [D33364780](https://github.com/facebook/flipper/search?q=D33364780&type=Commits) -  Data tables will now remember their configuration by default and share it across different applications
+ * [D33297125](https://github.com/facebook/flipper/search?q=D33297125&type=Commits) -  [experimental] It is now possible to run a full fledged Flipper as node + browser appication by using `npx flipper-server`
+ * [D33377718](https://github.com/facebook/flipper/search?q=D33377718&type=Commits) -  Fixed an issue where changing settings wasn't persisted when using "Apply + Restart
+ * [D33368216](https://github.com/facebook/flipper/search?q=D33368216&type=Commits) -  most data tables allow for horizontal scrolling now if they run out of space
+ * [D33368215](https://github.com/facebook/flipper/search?q=D33368215&type=Commits) -  make sure database plugin is horizontally scrollable
+ * [D33405760](https://github.com/facebook/flipper/search?q=D33405760&type=Commits) -  Fixes an issue whereas the url encoding was incorrect for UTF-8
+
+
 # 0.127.0 (22/12/2021)
 
  * [D33089810](https://github.com/facebook/flipper/search?q=D33089810&type=Commits) -  Move crash watcher to the server. Add 'device-crash' event. Add 'device-start-crash-watcher', 'device-stop-crash-watcher' commands. Add 'onDeviceCrash' method to Plugin Client.

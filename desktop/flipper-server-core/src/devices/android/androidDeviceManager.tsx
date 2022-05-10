@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -10,20 +10,21 @@
 import AndroidDevice from './AndroidDevice';
 import KaiOSDevice from './KaiOSDevice';
 import child_process from 'child_process';
-import {getAdbClient} from './adbClient';
-import which from 'which';
-import {promisify} from 'util';
 import {Client as ADBClient, Device} from 'adbkit';
 import {join} from 'path';
 import {FlipperServerImpl} from '../../FlipperServerImpl';
 import {notNull} from '../../utils/typeUtils';
-import {
-  getServerPortsConfig,
-  getFlipperServerConfig,
-} from '../../FlipperServerConfig';
+import {getServerPortsConfig} from '../../FlipperServerConfig';
+import AndroidCertificateProvider from './AndroidCertificateProvider';
 
 export class AndroidDeviceManager {
-  constructor(public flipperServer: FlipperServerImpl) {}
+  readonly certificateProvider: AndroidCertificateProvider;
+  constructor(
+    private readonly flipperServer: FlipperServerImpl,
+    private readonly adbClient: ADBClient,
+  ) {
+    this.certificateProvider = new AndroidCertificateProvider(this.adbClient);
+  }
 
   private createDevice(
     adbClient: ADBClient,
@@ -85,21 +86,33 @@ export class AndroidDeviceManager {
               );
             });
           }
+
+          // The default way of capturing screenshots through adb does not seem to work
+          // There is a way of getting a screenshot through KaiOS dev tools though
+          if (androidLikeDevice instanceof AndroidDevice) {
+            await androidLikeDevice.setIntoPermissiveMode();
+
+            const screenRecordAvailable =
+              await androidLikeDevice.screenRecordAvailable();
+            androidLikeDevice.info.features.screenCaptureAvailable =
+              screenRecordAvailable;
+            androidLikeDevice.info.features.screenshotAvailable =
+              screenRecordAvailable;
+          }
+
           resolve(androidLikeDevice);
         } catch (e) {
           reject(e);
         }
       } catch (e) {
+        const message = `${e.message ?? e}`;
         if (
-          e &&
-          e.message &&
-          e.message === `Failure: 'device still connecting'`
+          message.includes('device still connecting') ||
+          message.includes('device still authorizing')
         ) {
-          console.debug('Device still connecting: ' + device.id);
+          console.log('[conn] Device still connecting: ' + device.id);
         } else {
-          const isAuthorizationError = (e?.message as string)?.includes(
-            'device unauthorized',
-          );
+          const isAuthorizationError = message.includes('device unauthorized');
           if (!isAuthorizationError) {
             console.error('Failed to connect to android device', e);
           }
@@ -108,7 +121,7 @@ export class AndroidDeviceManager {
             title: 'Could not connect to ' + device.id,
             description: isAuthorizationError
               ? 'Make sure to authorize debugging on the phone'
-              : 'Failed to setup connection: ' + e,
+              : 'Failed to setup connection: ' + message,
           });
         }
         resolve(undefined); // not ready yet, we will find it in the next tick
@@ -172,8 +185,7 @@ export class AndroidDeviceManager {
 
   async watchAndroidDevices() {
     try {
-      const client = await getAdbClient(getFlipperServerConfig().settings);
-      client
+      this.adbClient
         .trackDevices()
         .then((tracker) => {
           tracker.on('error', (err) => {
@@ -195,10 +207,10 @@ export class AndroidDeviceManager {
 
           tracker.on('add', async (device) => {
             if (device.type !== 'offline') {
-              this.registerDevice(client, device);
+              this.registerDevice(this.adbClient, device);
             } else {
               console.warn(
-                `[conn] Found device ${device.id}, but it has status offline. If this concerns an emulator and the problem persists, try these solutins: https://stackoverflow.com/a/21330228/1983583, https://stackoverflow.com/a/56053223/1983583`,
+                `[conn] Found device ${device.id}, but it has status offline. If this concerns an emulator and the problem persists, try these potential solutions: https://stackoverflow.com/a/21330228/1983583, https://stackoverflow.com/a/56053223/1983583`,
               );
             }
           });
@@ -207,7 +219,7 @@ export class AndroidDeviceManager {
             if (device.type === 'offline') {
               this.flipperServer.unregisterDevice(device.id);
             } else {
-              this.registerDevice(client, device);
+              this.registerDevice(this.adbClient, device);
             }
           });
 

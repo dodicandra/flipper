@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -8,7 +8,7 @@
  */
 
 import {Provider} from 'react-redux';
-import ReactDOM from 'react-dom';
+import {createRoot} from 'react-dom/client';
 
 import {init as initLogger} from './fb-stubs/Logger';
 import {SandyApp} from './sandy-chrome/SandyApp';
@@ -44,6 +44,7 @@ import {getRenderHostInstance} from './RenderHost';
 import {startGlobalErrorHandling} from './utils/globalErrorHandling';
 import {loadTheme} from './utils/loadTheme';
 import {connectFlipperServerToStore} from './dispatcher/flipperServer';
+import ReactDOM from 'react-dom';
 
 class AppFrame extends React.Component<
   {logger: Logger; persistor: Persistor},
@@ -164,9 +165,13 @@ function init(flipperServer: FlipperServer) {
 
   connectFlipperServerToStore(flipperServer, store, logger);
 
+  // TODO T116224873: Return the following code back instead of ReactDOM.react when the following issue is fixed: https://github.com/react-component/trigger/issues/288
+  // const root = createRoot(document.getElementById('root')!);
+  // root.render(<AppFrame logger={logger} persistor={persistor} />);
+
   ReactDOM.render(
     <AppFrame logger={logger} persistor={persistor} />,
-    document.getElementById('root'),
+    document.getElementById('root')!,
   );
 
   enableConsoleHook();

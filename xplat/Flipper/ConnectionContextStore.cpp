@@ -1,5 +1,5 @@
 /*
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -114,9 +114,16 @@ std::string ConnectionContextStore::getDeviceId() {
 folly::Optional<FlipperCertificateExchangeMedium>
 ConnectionContextStore::getLastKnownMedium() {
   try {
-    std::string config =
-        loadStringFromFile(absoluteFilePath(CONNECTION_CONFIG_FILE));
-    auto maybeMedium = folly::parseJson(config)["medium"];
+    auto configurationFilePath = absoluteFilePath(CONNECTION_CONFIG_FILE);
+    if (!fileExists(configurationFilePath)) {
+      return folly::none;
+    }
+    std::string data = loadStringFromFile(configurationFilePath);
+    auto config = folly::parseJson(data);
+    if (config.count("medium") == 0) {
+      return folly::none;
+    }
+    auto maybeMedium = config["medium"];
     return maybeMedium.isInt()
         ? folly::Optional<FlipperCertificateExchangeMedium>{static_cast<
               FlipperCertificateExchangeMedium>(maybeMedium.getInt())}
@@ -141,6 +148,23 @@ std::string ConnectionContextStore::getCertificateDirectoryPath() {
 
 std::string ConnectionContextStore::getCACertificatePath() {
   return absoluteFilePath(FLIPPER_CA_FILE_NAME);
+}
+
+std::string ConnectionContextStore::getPath(StoreItem storeItem) {
+  switch (storeItem) {
+    case CSR:
+      return absoluteFilePath(CSR_FILE_NAME);
+    case FLIPPER_CA:
+      return absoluteFilePath(FLIPPER_CA_FILE_NAME);
+    case CLIENT_CERT:
+      return absoluteFilePath(CLIENT_CERT_FILE_NAME);
+    case PRIVATE_KEY:
+      return absoluteFilePath(PRIVATE_KEY_FILE);
+    case CERTIFICATE:
+      return absoluteFilePath(CERTIFICATE_FILE_NAME);
+    case CONNECTION_CONFIG:
+      return absoluteFilePath(CONNECTION_CONFIG_FILE);
+  }
 }
 
 bool ConnectionContextStore::resetState() {

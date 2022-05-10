@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,17 +7,18 @@
  * @format
  */
 
+import process from 'process';
 import os from 'os';
 import fs from 'fs-extra';
 import path from 'path';
 import {EnvironmentInfo, ReleaseChannel} from 'flipper-common';
 
 export async function getEnvironmentInfo(
-  staticPath: string,
+  packageJsonDir: string,
   isProduction: boolean,
 ): Promise<EnvironmentInfo> {
   const packageJson = await fs.readJSON(
-    path.resolve(staticPath, 'package.json'),
+    path.resolve(packageJsonDir, 'package.json'),
   );
 
   const releaseChannel: ReleaseChannel =

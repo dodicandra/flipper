@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -150,6 +150,63 @@ export function ConfigText(props: {content: string; frozen?: boolean}) {
   return (
     <ConfigFieldContainer>
       <InfoText>{props.content}</InfoText>
+      {props.frozen && <GrayedOutOverlay />}
+    </ConfigFieldContainer>
+  );
+}
+
+export function URLConfigField(props: {
+  label: string;
+  resetValue?: string;
+  defaultValue: string;
+  onChange: (path: string) => void;
+  frozen?: boolean;
+}) {
+  const [value, setValue] = useState(props.defaultValue);
+  const [isValid, setIsValid] = useState(true);
+
+  useEffect(() => {
+    try {
+      const url = new URL(value);
+      const isValidUrl =
+        ['http:', 'https:'].includes(url.protocol) &&
+        url.href.startsWith(value);
+      setIsValid(isValidUrl);
+    } catch (_) {
+      setIsValid(false);
+    }
+  }, [value]);
+
+  return (
+    <ConfigFieldContainer>
+      <InfoText>{props.label}</InfoText>
+      <FileInputBox
+        placeholder={props.label}
+        value={value}
+        isValid={isValid}
+        onChange={(e) => {
+          setValue(e.target.value);
+          props.onChange(e.target.value);
+        }}
+      />
+
+      {props.resetValue && (
+        <FlexColumn
+          title={`Reset to default value ${props.resetValue}`}
+          onClick={() => {
+            setValue(props.resetValue!);
+            props.onChange(props.resetValue!);
+          }}>
+          <CenteredGlyph
+            color={theme.primaryColor}
+            name="undo"
+            variant="outline"
+          />
+        </FlexColumn>
+      )}
+      {isValid ? null : (
+        <CenteredGlyph name="caution-triangle" color={colors.yellow} />
+      )}
       {props.frozen && <GrayedOutOverlay />}
     </ConfigFieldContainer>
   );

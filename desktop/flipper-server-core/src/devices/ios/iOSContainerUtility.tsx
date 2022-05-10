@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -18,6 +18,11 @@ import child_process from 'child_process';
 import fs from 'fs-extra';
 import path from 'path';
 const exec = promisify(child_process.exec);
+
+export type IdbConfig = {
+  idbPath: string;
+  enablePhysicalIOS: boolean;
+};
 
 // Use debug to get helpful logs when idb fails
 const idbLogLevel = 'DEBUG';
@@ -148,6 +153,7 @@ async function targets(
   if (process.platform !== 'darwin') {
     return [];
   }
+
   const isXcodeInstalled = await isXcodeDetected();
   if (!isXcodeInstalled) {
     if (!isPhysicalDeviceEnabled) {
@@ -203,17 +209,16 @@ async function push(
   idbPath: string,
 ): Promise<void> {
   await memoize(checkIdbIsInstalled)(idbPath);
-  return wrapWithErrorMessage(
-    reportPlatformFailures(
-      safeExec(
-        `${idbPath} file push --log ${idbLogLevel} --udid ${udid} --bundle-id ${bundleId} '${src}' '${dst}'`,
-      )
-        .then(() => {
-          return;
-        })
-        .catch((e) => handleMissingIdb(e, idbPath)),
-      `${operationPrefix}:push`,
-    ),
+
+  return reportPlatformFailures(
+    safeExec(
+      `${idbPath} file push --log ${idbLogLevel} --udid ${udid} --bundle-id ${bundleId} '${src}' '${dst}'`,
+    )
+      .then(() => {
+        return;
+      })
+      .catch((e) => handleMissingIdb(e, idbPath)),
+    `${operationPrefix}:push`,
   );
 }
 
@@ -225,18 +230,17 @@ async function pull(
   idbPath: string,
 ): Promise<void> {
   await memoize(checkIdbIsInstalled)(idbPath);
-  return wrapWithErrorMessage(
-    reportPlatformFailures(
-      safeExec(
-        `${idbPath} file pull --log ${idbLogLevel} --udid ${udid} --bundle-id ${bundleId} '${src}' '${dst}'`,
-      )
-        .then(() => {
-          return;
-        })
-        .catch((e) => handleMissingIdb(e, idbPath))
-        .catch((e) => handleMissingPermissions(e)),
-      `${operationPrefix}:pull`,
-    ),
+
+  return reportPlatformFailures(
+    safeExec(
+      `${idbPath} file pull --log ${idbLogLevel} --udid ${udid} --bundle-id ${bundleId} '${src}' '${dst}'`,
+    )
+      .then(() => {
+        return;
+      })
+      .catch((e) => handleMissingIdb(e, idbPath))
+      .catch((e) => handleMissingPermissions(e)),
+    `${operationPrefix}:pull`,
   );
 }
 
@@ -274,21 +278,10 @@ function handleMissingPermissions(e: Error): void {
     console.warn(e);
     throw new Error(
       'Cannot connect to iOS application. idb_certificate_pull_failed' +
-        'Idb lacks permissions to exchange certificates. Did you install a source build ([FB] or enable certificate exchange)? ' +
-        e,
+        'Idb lacks permissions to exchange certificates. Did you install a source build ([FB] or enable certificate exchange)? See console logs for more details.',
     );
   }
   throw e;
-}
-
-function wrapWithErrorMessage<T>(p: Promise<T>): Promise<T> {
-  return p.catch((e: Error) => {
-    console.warn(e);
-    // Give the user instructions. Don't embed the error because it's unique per invocation so won't be deduped.
-    throw new Error(
-      "A problem with idb has ocurred. Please run `sudo rm -rf /tmp/idb*` and `sudo yum install -y fb-idb` to update it, if that doesn't fix it, post in Flipper Support.",
-    );
-  });
 }
 
 async function isXcodeDetected(): Promise<boolean> {

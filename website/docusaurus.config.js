@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -12,21 +12,30 @@ const {fbContent, fbInternalOnly} = require('internaldocs-fb-helpers');
 // end-import-example
 
 const repoUrl = 'https://github.com/facebook/flipper';
+const siteUrl = fbContent({
+    internal: 'https://flipper.thefacebook.com/',
+    external: 'https://fbflipper.com/',
+});
 const siteConfig = {
   title: fbContent({
     internal: 'Flipper @FB',
     external: 'Flipper',
   }),
   tagline: 'Extensible mobile app debugging',
-  url: fbContent({
-    internal: 'https://flipper.thefacebook.com/',
-    external: 'https://fbflipper.com/',
-  }),
+  url: siteUrl,
   baseUrl: '/',
   trailingSlash: true,
   projectName: 'flipper',
   // TODO: T69061026 enable once sandy docs are complete: external_domain: 'fbflipper.com',
   themeConfig: {
+    announcementBar: {
+      id: 'support_ukraine',
+      content:
+        'Support Ukraine 🇺🇦 <a target="_blank" rel="noopener noreferrer" href="https://opensource.fb.com/support-ukraine"> Help Provide Humanitarian Aid to Ukraine</a>.',
+      backgroundColor: '#20232a',
+      textColor: '#fff',
+      isCloseable: false,
+    },
     navbar: {
       title: fbContent({
         internal: 'Flipper @FB',
@@ -160,8 +169,8 @@ const siteConfig = {
   scripts: [
     'https://buttons.github.io/buttons.js',
     'https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.0/clipboard.min.js',
-    '/js/code-blocks-buttons.js',
-    '/js/google-analytics.js',
+    `${siteUrl}js/code-blocks-buttons.js`,
+    `${siteUrl}js/google-analytics.js`,
   ],
   stylesheets: [],
   // start_config_example

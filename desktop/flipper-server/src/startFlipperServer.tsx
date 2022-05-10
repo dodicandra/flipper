@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -23,11 +23,13 @@ import {
   setLoggerInstance,
 } from 'flipper-common';
 import path from 'path';
-import fs from 'fs';
+import fs from 'fs-extra';
 
 export async function startFlipperServer(
   rootDir: string,
   staticPath: string,
+  settingsString: string,
+  enableLauncherSettings: boolean,
 ): Promise<FlipperServerImpl> {
   if (os.platform() === 'darwin') {
     // By default Node.JS has its internal certificate storage and doesn't use
@@ -57,21 +59,25 @@ export async function startFlipperServer(
   let keytar: any = undefined;
   try {
     if (!isTest()) {
-      keytar = electronRequire(
-        path.join(
-          staticPath,
-          'native-modules',
-          `keytar-${process.platform}.node`,
-        ),
+      const keytarPath = path.join(
+        staticPath,
+        'native-modules',
+        `keytar-${process.platform}-${process.arch}.node`,
       );
+      if (!(await fs.pathExists(keytarPath))) {
+        throw new Error(
+          `Keytar binary does not exist for platform ${process.platform}-${process.arch}`,
+        );
+      }
+      keytar = electronRequire(keytarPath);
     }
   } catch (e) {
     console.error('Failed to load keytar:', e);
   }
 
-  const environmentInfo = await getEnvironmentInfo(staticPath, isProduction);
+  const environmentInfo = await getEnvironmentInfo(appPath, isProduction);
 
-  const flipperServer = new FlipperServerImpl(
+  return new FlipperServerImpl(
     {
       environmentInfo,
       env: parseEnvironmentVariables(process.env),
@@ -85,17 +91,14 @@ export async function startFlipperServer(
         tempPath: os.tmpdir(),
         desktopPath: desktopPath,
       },
-      launcherSettings: await loadLauncherSettings(),
+      launcherSettings: await loadLauncherSettings(enableLauncherSettings),
       processConfig: loadProcessConfig(env),
-      settings: await loadSettings(),
+      settings: await loadSettings(settingsString),
       validWebSocketOrigins: ['localhost:', 'http://localhost:'],
     },
     logger,
     keytar,
   );
-
-  await flipperServer.connect();
-  return flipperServer;
 }
 
 function createLogger(): Logger {

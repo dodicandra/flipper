@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -44,22 +44,17 @@ export abstract class ServerDevice {
    */
   disconnect(): void {
     this.connected = false;
+    this.info.features.screenCaptureAvailable = false;
+    this.info.features.screenshotAvailable = false;
     this.logListener.stop();
     this.crashWatcher.stop();
-  }
-
-  async screenshotAvailable(): Promise<boolean> {
-    return false;
+    this.flipperServer.pluginManager.stopAllServerAddOns(this.info.serial);
   }
 
   screenshot(): Promise<Buffer> {
     return Promise.reject(
       new Error('No screenshot support for current device'),
     );
-  }
-
-  async screenCaptureAvailable(): Promise<boolean> {
-    return false;
   }
 
   async startScreenCapture(_destination: string): Promise<void> {

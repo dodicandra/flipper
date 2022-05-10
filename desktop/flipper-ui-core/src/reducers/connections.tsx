@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -306,7 +306,7 @@ export default (state: State = INITAL_STATE, action: Actions): State => {
 
       return produce(state, (draft) => {
         if (draft.clients.has(payload.id)) {
-          console.error(
+          console.warn(
             `Received a new connection for client ${payload.id}, but the old connection was not cleaned up`,
           );
         }
@@ -473,7 +473,7 @@ export const selectPlugin = (payload: {
 
 export const setMenuEntries = (menuEntries: NormalizedMenuEntry[]): Action => ({
   type: 'SET_MENU_ENTRIES',
-  payload: menuEntries,
+  payload: menuEntries.slice(),
 });
 
 export const selectClient = (clientId: string): Action => ({

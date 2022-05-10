@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -8,7 +8,7 @@
  */
 
 import React, {cloneElement} from 'react';
-import {styled, FlexRow, FlexColumn} from '../ui';
+import {styled} from '../ui';
 import {Modal, Button, Image, Checkbox, Space, Typography, Tooltip} from 'antd';
 import {
   RocketOutlined,
@@ -29,7 +29,7 @@ import {getFlipperLib} from 'flipper-plugin';
 import {ReleaseChannel} from 'flipper-common';
 import {showChangelog} from '../chrome/ChangelogSheet';
 
-const RowContainer = styled(FlexRow)({
+const RowContainer = styled(Layout.Horizontal)({
   alignItems: 'flex-start',
   padding: `${theme.space.small}px`,
   cursor: 'pointer',
@@ -53,19 +53,19 @@ function Row(props: {
           {cloneElement(props.icon, {
             style: {fontSize: 36, color: theme.primaryColor},
           })}
-          <FlexColumn>
+          <Layout.Container>
             <Title level={3} style={{color: theme.primaryColor}}>
               {props.title}
             </Title>
             <Text type="secondary">{props.subtitle}</Text>
-          </FlexColumn>
+          </Layout.Container>
         </Space>
       </RowContainer>
     </Tracked>
   );
 }
 
-const FooterContainer = styled(FlexRow)({
+const FooterContainer = styled(Layout.Horizontal)({
   justifyContent: 'space-between',
   alignItems: 'center',
 });
@@ -108,6 +108,7 @@ export default function WelcomeScreen({
 }) {
   return (
     <Modal
+      centered
       closable={false}
       visible={visible}
       footer={
@@ -141,9 +142,8 @@ export function WelcomeScreenStaticView() {
 }
 
 function WelcomeScreenContent() {
-  function isInsidersChannel() {
-    return config.getReleaseChannel() === ReleaseChannel.INSIDERS;
-  }
+  const isInsidersChannel =
+    config.getReleaseChannel() === ReleaseChannel.INSIDERS;
 
   return (
     <TrackingScope scope="welcomescreen">
@@ -153,7 +153,7 @@ function WelcomeScreenContent() {
         style={{width: '100%', padding: '0 32px 32px', alignItems: 'center'}}>
         <Image
           style={{
-            filter: isInsidersChannel() ? 'hue-rotate(230deg)' : 'none',
+            filter: isInsidersChannel ? 'hue-rotate(230deg)' : 'none',
           }}
           width={125}
           height={125}
@@ -169,9 +169,12 @@ function WelcomeScreenContent() {
               padding: 0,
               border: 'none',
               background: 'none',
-              color: isInsidersChannel() ? 'rgb(62, 124, 66)' : '#000',
+              color: isInsidersChannel
+                ? 'rgb(62, 124, 66)'
+                : theme.textColorSecondary,
               textTransform: 'capitalize',
-              fontWeight: isInsidersChannel() ? 'bold' : 'normal',
+              fontSize: theme.fontSize.default,
+              fontWeight: isInsidersChannel ? theme.bold : 'normal',
             }}>
             {config.getReleaseChannel()}
           </code>

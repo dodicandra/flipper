@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,13 +7,15 @@
  * @format
  */
 
+const path = require('path');
+
 const fbjs = require('eslint-config-fbjs');
 
 const rulesDirPlugin = require('eslint-plugin-rulesdir');
-rulesDirPlugin.RULES_DIR = 'eslint-rules';
+rulesDirPlugin.RULES_DIR = path.join(__dirname, 'eslint-rules');
 
 // enforces copy-right header and @format directive to be present in every file
-const pattern = /^\*\r?\n[\S\s]*Facebook[\S\s]* \* @format\r?\n/;
+const pattern = /^\*\r?\n[\S\s]*Meta Platforms, Inc\.[\S\s]* \* @format\r?\n/;
 
 // This list should match the replacements defined in `replace-flipper-requires.ts` and `dispatcher/plugins.tsx`
 const builtInModules = [
@@ -142,6 +144,9 @@ module.exports = {
     'flipper/no-relative-imports-across-packages': [2],
     'flipper/no-electron-remote-imports': [1],
     'flipper/no-console-error-without-context': [2],
+    'flipper/no-ts-file-extension': 2,
+    'flipper/no-i-prefix-interfaces': 2,
+    'flipper/no-interface-props-or-state': 2,
     'communist-spelling/communist-spelling': [1, {allow: ['cancelled']}],
 
     // promise rules, see https://github.com/xjamundx/eslint-plugin-promise for details on each of them
@@ -186,10 +191,22 @@ module.exports = {
             caughtErrorsIgnorePattern: '^_',
           },
         ],
+        '@typescript-eslint/naming-convention': [
+          2,
+          {
+            selector: 'typeLike',
+            format: ['PascalCase', 'UPPER_CASE'],
+            leadingUnderscore: 'allow',
+          },
+        ],
       },
     },
     {
       files: ['plugins/**/*.ts', 'plugins/**/*.tsx'],
+      excludedFiles: [
+        'plugins/**/serverAddOn.ts',
+        'plugins/**/serverAddOn.tsx',
+      ],
       rules: {
         'no-restricted-imports': [
           'error',
@@ -254,11 +271,9 @@ module.exports = {
       files: [
         'plugins/**/__tests__/*.tsx',
         'plugins/**/__tests__/*.ts',
-        'plugins/postinstall.ts',
+        'plugins/postinstall.tsx',
         // TODO: Remove specific plugin overrides down below
-        'plugins/fb/graphql/data/getQueryFromQueryId.tsx',
         'plugins/fb/kaios-portal/kaios-debugger-client/client.tsx',
-        'plugins/public/reactdevtools/index.tsx',
       ],
       rules: {
         'no-restricted-imports': [

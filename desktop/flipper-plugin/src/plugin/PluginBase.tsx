@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -17,6 +17,12 @@ import {batched} from '../state/batch';
 import {Idler} from '../utils/Idler';
 import {Notification} from './Notification';
 import {Logger} from '../utils/Logger';
+import {CreatePasteArgs, CreatePasteResult} from './Paste';
+import {
+  EventsContract,
+  MethodsContract,
+  ServerAddOnControls,
+} from 'flipper-common';
 
 type StateExportHandler<T = any> = (
   idler: Idler,
@@ -24,7 +30,10 @@ type StateExportHandler<T = any> = (
 ) => Promise<T | undefined | void>;
 type StateImportHandler<T = any> = (data: T) => void;
 
-export interface BasePluginClient {
+export interface BasePluginClient<
+  ServerAddOnEvents extends EventsContract = {},
+  ServerAddOnMethods extends MethodsContract = {},
+> {
   /**
    * A key that uniquely identifies this plugin instance, captures the current device/client/plugin combination.
    */
@@ -94,7 +103,9 @@ export interface BasePluginClient {
    * Creates a Paste (similar to a Github Gist).
    * Facebook only function. Resolves to undefined if creating a paste failed.
    */
-  createPaste(input: string): Promise<string | undefined>;
+  createPaste(
+    args: string | CreatePasteArgs,
+  ): Promise<CreatePasteResult | undefined>;
 
   /**
    * Returns true if this is an internal Facebook build.
@@ -125,6 +136,50 @@ export interface BasePluginClient {
    * Logger instance that logs information to the console, but also to the internal logging (in FB only builds) and which can be used to track performance.
    */
   logger: Logger;
+
+  /**
+   * Triggered when a server add-on starts.
+   * You should send messages to the server add-on only after it connects.
+   * Do not forget to stop all communication when the add-on stops.
+   * See `onServerAddStop`.
+   */
+  onServerAddOnStart(callback: () => void): void;
+
+  /**
+   * Triggered when a server add-on stops.
+   * You should stop all communication with the server add-on when the add-on stops.
+   */
+  onServerAddOnStop(callback: () => void): void;
+
+  /**
+   * Subscribe to a specific event arriving from the server add-on.
+   *
+   * Messages can only arrive if the plugin is enabled and connected.
+   * For background plugins messages will be batched and arrive the next time the plugin is connected.
+   */
+  onServerAddOnMessage<Event extends keyof ServerAddOnEvents & string>(
+    event: Event,
+    callback: (params: ServerAddOnEvents[Event]) => void,
+  ): void;
+
+  /**
+   * Subscribe to all messages arriving from the server add-ons not handled by another listener.
+   *
+   * This handler is untyped, and onMessage should be favored over using onUnhandledMessage if the event name is known upfront.
+   */
+  onServerAddOnUnhandledMessage(
+    callback: (event: string, params: any) => void,
+  ): void;
+
+  /**
+   * Send a message to the server add-on
+   */
+  sendToServerAddOn<Method extends keyof ServerAddOnMethods & string>(
+    method: Method,
+    ...params: Parameters<ServerAddOnMethods[Method]> extends []
+      ? []
+      : [Parameters<ServerAddOnMethods[Method]>[0]]
+  ): ReturnType<ServerAddOnMethods[Method]>;
 }
 
 let currentPluginInstance: BasePluginInstance | undefined = undefined;
@@ -176,6 +231,8 @@ export abstract class BasePluginInstance {
 
   activated = false;
   destroyed = false;
+  private serverAddOnStarted = false;
+  private serverAddOnStopped = false;
   readonly events = new EventEmitter();
 
   // temporarily field that is used during deserialization
@@ -197,6 +254,7 @@ export abstract class BasePluginInstance {
   readonly instanceId = ++staticInstanceId;
 
   constructor(
+    private readonly serverAddOnControls: ServerAddOnControls,
     flipperLib: FlipperLib,
     definition: SandyPluginDefinition,
     device: Device,
@@ -266,7 +324,7 @@ export abstract class BasePluginInstance {
     }
   }
 
-  protected createBasePluginClient(): BasePluginClient {
+  protected createBasePluginClient(): BasePluginClient<any, any> {
     return {
       pluginKey: this.pluginKey,
       device: this.device,
@@ -338,6 +396,37 @@ export abstract class BasePluginInstance {
         this.flipperLib.showNotification(this.pluginKey, notification);
       },
       logger: this.flipperLib.logger,
+      onServerAddOnStart: (cb) => {
+        this.events.on('serverAddOnStart', batched(cb));
+        if (this.serverAddOnStarted) {
+          batched(cb)();
+        }
+      },
+      onServerAddOnStop: (cb) => {
+        this.events.on('serverAddOnStop', batched(cb));
+        if (this.serverAddOnStopped) {
+          batched(cb)();
+        }
+      },
+      sendToServerAddOn: (method, params) =>
+        this.serverAddOnControls.sendMessage(
+          this.definition.packageName,
+          method,
+          params,
+        ),
+      onServerAddOnMessage: (event, cb) => {
+        this.serverAddOnControls.receiveMessage(
+          this.definition.packageName,
+          event,
+          batched(cb),
+        );
+      },
+      onServerAddOnUnhandledMessage: (cb) => {
+        this.serverAddOnControls.receiveAnyMessage(
+          this.definition.packageName,
+          batched(cb),
+        );
+      },
     };
   }
 
@@ -382,6 +471,7 @@ export abstract class BasePluginInstance {
     this.crashListeners.splice(0).forEach((handle) => {
       this.device.removeCrashListener(handle);
     });
+    this.serverAddOnControls.unsubscribePlugin(this.definition.packageName);
     this.events.emit('destroy');
     this.destroyed = true;
   }
@@ -444,4 +534,52 @@ export abstract class BasePluginInstance {
   }
 
   abstract toJSON(): string;
+
+  protected abstract serverAddOnOwner: string;
+
+  protected startServerAddOn() {
+    const pluginDetails = this.definition.details;
+    if (pluginDetails.serverAddOn) {
+      this.serverAddOnControls
+        .start(
+          pluginDetails.name,
+          pluginDetails.isBundled
+            ? {isBundled: true}
+            : {path: pluginDetails.serverAddOnEntry!},
+          this.serverAddOnOwner,
+        )
+        .then(() => {
+          this.events.emit('serverAddOnStart');
+          this.serverAddOnStarted = true;
+        })
+        .catch((e) => {
+          console.warn(
+            'Failed to start a server add on',
+            pluginDetails.name,
+            this.serverAddOnOwner,
+            e,
+          );
+        });
+    }
+  }
+
+  protected stopServerAddOn() {
+    const {serverAddOn, name} = this.definition.details;
+    if (serverAddOn) {
+      this.serverAddOnControls
+        .stop(name, this.serverAddOnOwner)
+        .finally(() => {
+          this.events.emit('serverAddOnStop');
+          this.serverAddOnStopped = true;
+        })
+        .catch((e) => {
+          console.warn(
+            'Failed to stop a server add on',
+            name,
+            this.serverAddOnOwner,
+            e,
+          );
+        });
+    }
+  }
 }

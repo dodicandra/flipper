@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -40,6 +40,7 @@ import {getFlipperLib} from 'flipper-plugin';
 type State = {
   init: boolean;
   inTargetMode: boolean;
+  inSnapshotMode: boolean;
   inAXMode: boolean;
   inAlignmentMode: boolean;
   selectedElement: ElementID | null | undefined;
@@ -201,6 +202,7 @@ export default class LayoutPlugin extends FlipperPlugin<
   state: State = {
     init: false,
     inTargetMode: false,
+    inSnapshotMode: false,
     inAXMode: false,
     inAlignmentMode: false,
     selectedElement: null,
@@ -315,6 +317,10 @@ export default class LayoutPlugin extends FlipperPlugin<
       this.setState({inTargetMode});
       this.client.send('setSearchActive', {active: inTargetMode});
     }
+  };
+
+  onToggleSnapshotMode = () => {
+    this.setState((prevState) => ({inSnapshotMode: !prevState.inSnapshotMode}));
   };
 
   onToggleAXMode = () => {
@@ -476,14 +482,25 @@ export default class LayoutPlugin extends FlipperPlugin<
           <Toolbar>
             {!this.props.isArchivedDevice && (
               <ToolbarIcon
+                key="targetMode"
                 onClick={this.onToggleTargetMode}
                 title="Toggle target mode"
                 icon="target"
                 active={this.state.inTargetMode}
               />
             )}
+            {!this.props.isArchivedDevice && (
+              <ToolbarIcon
+                key="snapshotMode"
+                onClick={this.onToggleSnapshotMode}
+                title="Toggle to see view snapshots on the attribute inspector"
+                icon="eye"
+                active={this.state.inSnapshotMode}
+              />
+            )}
             {this.realClient.query.os === 'Android' && (
               <ToolbarIcon
+                key="axMode"
                 onClick={this.onToggleAXMode}
                 title="Toggle to see the accessibility hierarchy"
                 icon="accessibility"
@@ -492,6 +509,7 @@ export default class LayoutPlugin extends FlipperPlugin<
             )}
             {!this.props.isArchivedDevice && (
               <ToolbarIcon
+                key="alignmentMode"
                 onClick={this.onToggleAlignmentMode}
                 title="Toggle AlignmentMode to show alignment lines"
                 icon="borders"
@@ -500,6 +518,7 @@ export default class LayoutPlugin extends FlipperPlugin<
             )}
             {this.props.isArchivedDevice && this.state.visualizerScreenshot && (
               <ToolbarIcon
+                key="visualizer"
                 onClick={this.onToggleVisualizer}
                 title="Toggle visual recreation of layout"
                 icon="mobile"
@@ -534,6 +553,7 @@ export default class LayoutPlugin extends FlipperPlugin<
             client={this.getClient()}
             realClient={this.realClient}
             element={element}
+            inSnapshotMode={this.state.inSnapshotMode}
             onValueChanged={this.onDataValueChanged}
             logger={this.props.logger}
           />

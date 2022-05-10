@@ -74,6 +74,8 @@ Tip: start with `yarn start --fast-refresh` for experimental fast refresh.
 
 <FbInternalOnly>
 
+Note: All these steps must be run on a local machine (e.g. laptop) and development cannot be done on a Dev Server or OnDemand as Flipper is a desktop application.
+
 ```bash
 fbclone fbsource --sparse tools/scm/sparse/xplat/flipper-js
 cd ~/fbsource/xplat/sonar/desktop
@@ -156,10 +158,6 @@ To start Flipper against a specific OnDemand instance, set FB_ONDEMAND flag, e.g
 </FbInternalOnly>
 
 ## Guidelines for writing TypeScript
-* **Important:** Use `.tsx` file extension for all TypeScript files (instead of `.ts`)
-* Prefer `type` for React props and state over interfaces
-* Don’t prefix interfaces with `I`
-* Enums, Types and Interfaces use PascalCase (uppercase first letter)
 * Install 3rd party type definitions as dev dependency (e.g. `yarn add @types/lodash --dev`)
 
 ## Submitting a diff / PR

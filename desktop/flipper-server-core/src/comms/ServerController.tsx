@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -12,11 +12,11 @@ import {
   ClientDescription,
   ClientQuery,
   isTest,
-  GK,
   buildClientId,
   Logger,
   UninitializedClient,
   reportPlatformFailures,
+  FlipperServerEvents,
 } from 'flipper-common';
 import CertificateProvider from '../utils/CertificateProvider';
 import {ClientConnection, ConnectionStatus} from './ClientConnection';
@@ -25,6 +25,7 @@ import invariant from 'invariant';
 import DummyDevice from '../devices/DummyDevice';
 import {
   appNameWithUpdateHint,
+  assertNotNull,
   cloneClientQuerySafeForLogging,
   transformCertificateExchangeMediumToType,
 } from './Utilities';
@@ -42,6 +43,12 @@ import {
   getServerPortsConfig,
   getFlipperServerConfig,
 } from '../FlipperServerConfig';
+import {
+  extractAppNameFromCSR,
+  loadSecureServerConfig,
+} from '../utils/certificateUtils';
+import DesktopCertificateProvider from '../devices/desktop/DesktopCertificateProvider';
+import WWWCertificateProvider from '../fb-stubs/WWWCertificateProvider';
 
 type ClientTimestampTracker = {
   insecureStart?: number;
@@ -58,10 +65,6 @@ type ClientCsrQuery = {
   csr_path?: string | undefined;
 };
 
-interface ServerController {
-  on(event: 'error', callback: (err: Error) => void): this;
-}
-
 /**
  * Responsible of creating and managing the actual underlying servers:
  * - Insecure (used for certificate exchange)
@@ -70,18 +73,19 @@ interface ServerController {
  *
  * Additionally, it manages client connections.
  */
-class ServerController extends EventEmitter implements ServerEventsListener {
-  connections: Map<string, ClientInfo>;
-  timestamps: Map<string, ClientTimestampTracker>;
+export class ServerController
+  extends EventEmitter
+  implements ServerEventsListener
+{
+  connections: Map<string, ClientInfo> = new Map();
+  timestamps: Map<string, ClientTimestampTracker> = new Map();
 
-  initialized: Promise<void> | null;
-  secureServer: Promise<ServerAdapter> | null;
-  insecureServer: Promise<ServerAdapter> | null;
-  altSecureServer: Promise<ServerAdapter> | null;
-  altInsecureServer: Promise<ServerAdapter> | null;
-  browserServer: Promise<ServerAdapter> | null;
+  secureServer: ServerAdapter | null = null;
+  insecureServer: ServerAdapter | null = null;
+  altSecureServer: ServerAdapter | null = null;
+  altInsecureServer: ServerAdapter | null = null;
+  browserServer: ServerAdapter | null = null;
 
-  certificateProvider: CertificateProvider;
   connectionTracker: ConnectionTracker;
 
   flipperServer: FlipperServerImpl;
@@ -91,19 +95,7 @@ class ServerController extends EventEmitter implements ServerEventsListener {
   constructor(flipperServer: FlipperServerImpl) {
     super();
     this.flipperServer = flipperServer;
-    this.connections = new Map();
-    this.timestamps = new Map();
-    this.certificateProvider = new CertificateProvider(
-      this,
-      getFlipperServerConfig().settings,
-    );
     this.connectionTracker = new ConnectionTracker(this.logger);
-    this.secureServer = null;
-    this.insecureServer = null;
-    this.altSecureServer = null;
-    this.altInsecureServer = null;
-    this.browserServer = null;
-    this.initialized = null;
   }
 
   onClientMessage(clientId: string, payload: string): void {
@@ -122,78 +114,73 @@ class ServerController extends EventEmitter implements ServerEventsListener {
    * Initialisation is complete once the initialized promise is fullfilled at
    * which point Flipper is accepting connections.
    */
-  init() {
+  async init() {
     if (isTest()) {
       throw new Error('Spawing new server is not supported in test');
     }
     const {insecure, secure} = getServerPortsConfig().serverPorts;
 
-    this.initialized = this.certificateProvider
-      .loadSecureServerConfig()
-      .then((options) => {
-        console.info('[conn] secure server listening at port: ', secure);
-        this.secureServer = createServer(secure, this, options);
-        const {secure: altSecure} = getServerPortsConfig().altServerPorts;
-        console.info(
-          '[conn] secure server (ws) listening at port: ',
-          altSecure,
-        );
-        this.altSecureServer = createServer(
-          altSecure,
-          this,
-          options,
-          TransportType.WebSocket,
-        );
-      })
-      .then(() => {
-        console.info('[conn] insecure server listening at port: ', insecure);
-        this.insecureServer = createServer(insecure, this);
-        const {insecure: altInsecure} = getServerPortsConfig().altServerPorts;
-        console.info(
-          '[conn] insecure server (ws) listening at port: ',
-          altInsecure,
-        );
-        this.altInsecureServer = createServer(
-          altInsecure,
-          this,
-          undefined,
-          TransportType.WebSocket,
-        );
-        return;
-      });
+    const options = await loadSecureServerConfig();
 
-    if (GK.get('comet_enable_flipper_connection')) {
-      console.info('[conn] Browser server (ws) listening at port: ', 8333);
-      this.browserServer = createBrowserServer(8333, this);
-    }
+    console.info('[conn] secure server listening at port: ', secure);
+    this.secureServer = await createServer(secure, this, options);
+    const {secure: altSecure} = getServerPortsConfig().altServerPorts;
+    console.info('[conn] secure server (ws) listening at port: ', altSecure);
+    this.altSecureServer = await createServer(
+      altSecure,
+      this,
+      options,
+      TransportType.WebSocket,
+    );
 
-    reportPlatformFailures(this.initialized, 'initializeServer');
+    console.info('[conn] insecure server listening at port: ', insecure);
+    this.insecureServer = await createServer(insecure, this);
+    const {insecure: altInsecure} = getServerPortsConfig().altServerPorts;
+    console.info(
+      '[conn] insecure server (ws) listening at port: ',
+      altInsecure,
+    );
+    this.altInsecureServer = await createServer(
+      altInsecure,
+      this,
+      undefined,
+      TransportType.WebSocket,
+    );
 
-    return this.initialized;
+    const browserPort = getServerPortsConfig().browserPort;
+    console.info('[conn] Browser server (ws) listening at port: ', browserPort);
+    this.browserServer = await createBrowserServer(browserPort, this);
   }
 
   /**
    * If initialized, it stops any started servers.
    */
   async close() {
-    if (this.initialized && (await this.initialized)) {
-      await Promise.all([
-        this.insecureServer && (await this.insecureServer).stop(),
-        this.secureServer && (await this.secureServer).stop(),
-        this.altInsecureServer && (await this.altInsecureServer).stop(),
-        this.altSecureServer && (await this.altSecureServer).stop(),
-        this.browserServer && (await this.browserServer).stop(),
-      ]);
-    }
+    await Promise.all([
+      this.insecureServer?.stop(),
+      this.secureServer?.stop(),
+      this.altInsecureServer?.stop(),
+      this.altSecureServer?.stop(),
+      this.browserServer?.stop(),
+    ]);
   }
 
   onConnectionCreated(
     clientQuery: SecureClientQuery,
     clientConnection: ClientConnection,
-    downgrade: boolean,
+    downgrade?: boolean,
   ): Promise<ClientDescription> {
-    const {app, os, device, device_id, sdk_version, csr, csr_path, medium} =
-      clientQuery;
+    const {
+      app,
+      os,
+      device,
+      device_id,
+      sdk_version,
+      csr,
+      csr_path,
+      medium,
+      rsocket,
+    } = clientQuery;
     const transformedMedium = transformCertificateExchangeMediumToType(medium);
     console.info(
       `[conn] Connection established: ${app} on ${device_id}. Medium ${medium}. CSR: ${csr_path}`,
@@ -208,6 +195,7 @@ class ServerController extends EventEmitter implements ServerEventsListener {
         device_id,
         sdk_version,
         medium: transformedMedium,
+        rsocket,
       },
       {csr, csr_path},
       downgrade,
@@ -301,13 +289,52 @@ class ServerController extends EventEmitter implements ServerEventsListener {
     appDirectory: string,
     medium: CertificateExchangeMedium,
   ): Promise<{deviceId: string}> {
+    let certificateProvider: CertificateProvider;
+    switch (clientQuery.os) {
+      case 'Android': {
+        assertNotNull(
+          this.flipperServer.android,
+          'Android settings have not been provided / enabled',
+        );
+        certificateProvider = this.flipperServer.android.certificateProvider;
+        break;
+      }
+      case 'iOS': {
+        assertNotNull(
+          this.flipperServer.ios,
+          'iOS settings have not been provided / enabled',
+        );
+        certificateProvider = this.flipperServer.ios.certificateProvider;
+
+        if (medium === 'WWW') {
+          certificateProvider = new WWWCertificateProvider(
+            this.flipperServer.keytarManager,
+          );
+        }
+        break;
+      }
+      // Used by Spark AR studio (search for SkylightFlipperClient)
+      // See D30992087
+      case 'MacOS':
+      case 'Windows': {
+        certificateProvider = new DesktopCertificateProvider();
+        break;
+      }
+      default: {
+        throw new Error(
+          `ServerController.onProcessCSR -> os ${clientQuery.os} does not support certificate exchange.`,
+        );
+      }
+    }
+
+    certificateProvider.verifyMedium(medium);
+
     return new Promise((resolve, reject) => {
       reportPlatformFailures(
-        this.certificateProvider.processCertificateSigningRequest(
+        certificateProvider.processCertificateSigningRequest(
           unsanitizedCSR,
           clientQuery.os,
           appDirectory,
-          medium,
         ),
         'processCertificateSigningRequest',
       )
@@ -350,6 +377,26 @@ class ServerController extends EventEmitter implements ServerEventsListener {
     return null;
   }
 
+  onClientSetupError(clientQuery: ClientQuery, e: any) {
+    console.warn(
+      `[conn] Failed to exchange certificate with ${clientQuery.app} on ${
+        clientQuery.device || clientQuery.device_id
+      }`,
+      e,
+    );
+    const client: UninitializedClient = {
+      os: clientQuery.os,
+      deviceName: clientQuery.device,
+      appName: appNameWithUpdateHint(clientQuery),
+    };
+    this.emit('client-setup-error', {
+      client,
+      error: `[conn] Failed to exchange certificate with ${
+        clientQuery.app
+      } on ${clientQuery.device || clientQuery.device_id}: ${e}`,
+    });
+  }
+
   /**
    * Creates a Client and sets the underlying connection.
    * @param connection A client connection to communicate between server and client.
@@ -370,13 +417,11 @@ class ServerController extends EventEmitter implements ServerEventsListener {
 
     // For Android, device id might change
     if (csr_path && csr && query.os === 'Android') {
-      const app_name = await this.certificateProvider.extractAppNameFromCSR(
-        csr,
-      );
+      const app_name = await extractAppNameFromCSR(csr);
+      assertNotNull(this.flipperServer.android);
       // TODO: allocate new object, kept now as is to keep changes minimal
       (query as any).device_id =
-        await this.certificateProvider.getTargetDeviceId(
-          query.os,
+        await this.flipperServer.android.certificateProvider.getTargetDeviceId(
           app_name,
           csr_path,
           csr,
@@ -482,7 +527,17 @@ class ServerController extends EventEmitter implements ServerEventsListener {
       );
       this.flipperServer.emit('client-disconnected', {id});
       this.connections.delete(id);
+      this.flipperServer.pluginManager.stopAllServerAddOns(id);
     }
+  }
+
+  onDeprecationNotice(message: string) {
+    const notification: FlipperServerEvents['notification'] = {
+      type: 'warning',
+      title: 'Deprecation notice',
+      description: message,
+    };
+    this.flipperServer.emit('notification', notification);
   }
 }
 
@@ -517,8 +572,6 @@ class ConnectionTracker {
     }
   }
 }
-
-export default ServerController;
 
 function clientQueryToKey(clientQuery: ClientQuery): string {
   return `${clientQuery.app}/${clientQuery.os}/${clientQuery.device}/${clientQuery.device_id}`;

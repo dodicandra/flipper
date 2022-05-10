@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -8,7 +8,7 @@
  */
 
 import {DeviceType, timeout} from 'flipper-common';
-import child_process, {ChildProcess} from 'child_process';
+import {ChildProcess} from 'child_process';
 import {IOSBridge} from './IOSBridge';
 import {ServerDevice} from '../ServerDevice';
 import {FlipperServerImpl} from '../../FlipperServerImpl';
@@ -16,10 +16,7 @@ import {iOSCrashWatcher} from './iOSCrashUtils';
 import {iOSLogListener} from './iOSLogListener';
 
 export default class IOSDevice extends ServerDevice {
-  log?: child_process.ChildProcessWithoutNullStreams;
-  buffer: string;
-  private recordingProcess?: ChildProcess;
-  private recordingLocation?: string;
+  private recording?: {process: ChildProcess; destination: string};
   private iOSBridge: IOSBridge;
   readonly logListener: iOSLogListener;
   readonly crashWatcher: iOSCrashWatcher;
@@ -37,8 +34,11 @@ export default class IOSDevice extends ServerDevice {
       title,
       os: 'iOS',
       icon: 'mobile',
+      features: {
+        screenCaptureAvailable: true,
+        screenshotAvailable: true,
+      },
     });
-    this.buffer = '';
     this.iOSBridge = iOSBridge;
 
     this.logListener = new iOSLogListener(
@@ -77,52 +77,51 @@ export default class IOSDevice extends ServerDevice {
     });
   }
 
-  async screenCaptureAvailable() {
-    return this.info.deviceType === 'emulator' && this.connected;
-  }
-
   async startScreenCapture(destination: string) {
-    this.recordingProcess = this.iOSBridge.recordVideo(
-      this.serial,
-      destination,
-    );
-    this.recordingLocation = destination;
+    const recording = this.recording;
+    if (recording) {
+      throw new Error(
+        `There is already an active recording at ${recording.destination}`,
+      );
+    }
+    const process = this.iOSBridge.recordVideo(this.serial, destination);
+    this.recording = {process, destination};
   }
 
   async stopScreenCapture(): Promise<string> {
-    if (this.recordingProcess && this.recordingLocation) {
-      const prom = new Promise<void>((resolve, _reject) => {
-        this.recordingProcess!.on(
-          'exit',
-          async (_code: number | null, _signal: NodeJS.Signals | null) => {
-            resolve();
-          },
-        );
-        this.recordingProcess!.kill('SIGINT');
-      });
-
-      const output: string = await timeout<void>(
-        5000,
-        prom,
-        'Timed out to stop a screen capture.',
-      )
-        .then(() => {
-          const {recordingLocation} = this;
-          this.recordingLocation = undefined;
-          return recordingLocation!;
-        })
-        .catch((e) => {
-          this.recordingLocation = undefined;
-          console.warn('Failed to terminate iOS screen recording:', e);
-          throw e;
-        });
-      return output;
+    const recording = this.recording;
+    if (!recording) {
+      throw new Error('No recording in progress');
     }
-    throw new Error('No recording in progress');
+    const prom = new Promise<void>((resolve, _reject) => {
+      recording.process.on(
+        'exit',
+        async (_code: number | null, _signal: NodeJS.Signals | null) => {
+          resolve();
+        },
+      );
+      recording.process.kill('SIGINT');
+    });
+
+    const output: string = await timeout<void>(
+      5000,
+      prom,
+      'Timed out to stop a screen capture.',
+    )
+      .then(() => {
+        this.recording = undefined;
+        return recording.destination;
+      })
+      .catch((e) => {
+        this.recording = undefined;
+        console.warn('Failed to terminate iOS screen recording:', e);
+        throw e;
+      });
+    return output;
   }
 
   disconnect() {
-    if (this.recordingProcess && this.recordingLocation) {
+    if (this.recording) {
       this.stopScreenCapture();
     }
     super.disconnect();

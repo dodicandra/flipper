@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -13,7 +13,16 @@ import xdg from 'xdg-basedir';
 import {Settings, Tristate} from 'flipper-common';
 import {readFile, writeFile, pathExists, mkdirp} from 'fs-extra';
 
-export async function loadSettings(): Promise<Settings> {
+export async function loadSettings(
+  settingsString: string = '',
+): Promise<Settings> {
+  if (settingsString !== '') {
+    try {
+      return replaceDefaultSettings(JSON.parse(settingsString));
+    } catch (e) {
+      throw new Error("couldn't read the user settingsString");
+    }
+  }
   if (!pathExists(getSettingsFile())) {
     return getDefaultSettings();
   }
@@ -64,6 +73,9 @@ function getDefaultSettings(): Settings {
     darkMode: 'light',
     showWelcomeAtStartup: true,
     suppressPluginErrors: false,
+    enablePluginMarketplace: false,
+    marketplaceURL: '',
+    enablePluginMarketplaceAutoUpdate: true,
   };
 }
 
@@ -73,4 +85,8 @@ function getDefaultAndroidSdkPath() {
 
 function getWindowsSdkPath() {
   return `${os.homedir()}\\AppData\\Local\\android\\sdk`;
+}
+
+function replaceDefaultSettings(userSettings: Partial<Settings>): Settings {
+  return {...getDefaultSettings(), ...userSettings};
 }

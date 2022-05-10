@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,14 +7,12 @@
  * @format
  */
 
+import './utils/fetch-polyfill';
 import EventEmitter from 'events';
-import ServerController from './comms/ServerController';
+import {ServerController} from './comms/ServerController';
 import {CertificateExchangeMedium} from './utils/CertificateProvider';
 import {AndroidDeviceManager} from './devices/android/androidDeviceManager';
-import {
-  IOSDeviceManager,
-  launchSimulator,
-} from './devices/ios/iOSDeviceManager';
+import {IOSDeviceManager} from './devices/ios/iOSDeviceManager';
 import metroDevice from './devices/metro/metroDeviceManager';
 import desktopDevice from './devices/desktop/desktopDeviceManager';
 import {
@@ -33,7 +31,7 @@ import {launchEmulator} from './devices/android/AndroidDevice';
 import {setFlipperServerConfig} from './FlipperServerConfig';
 import {saveSettings} from './utils/settings';
 import {saveLauncherSettings} from './utils/launcherSettings';
-import {KeytarManager, KeytarModule} from './utils/keytar';
+import {KeytarManager, KeytarModule, SERVICE_FLIPPER} from './utils/keytar';
 import {PluginManager} from './plugins/PluginManager';
 import {runHealthcheck, getHealthChecks} from './utils/runHealthchecks';
 import {openFile} from './utils/openFile';
@@ -49,11 +47,19 @@ import {promises} from 'fs';
 // Electron 11 runs on Node 12 which does not support fs.promises.rm
 import rm from 'rimraf';
 import assert from 'assert';
+import {initializeAdbClient} from './devices/android/adbClient';
+import {assertNotNull} from './comms/Utilities';
 
 const {access, copyFile, mkdir, unlink, stat, readlink, readFile, writeFile} =
   promises;
 
-export const SERVICE_FLIPPER = 'flipper.oAuthToken';
+function isHandledStartupError(e: Error) {
+  if (e.message.includes('EADDRINUSE')) {
+    return true;
+  }
+
+  return false;
+}
 
 /**
  * FlipperServer takes care of all incoming device & client connections.
@@ -70,10 +76,12 @@ export class FlipperServerImpl implements FlipperServer {
   readonly disposers: ((() => void) | void)[] = [];
   private readonly devices = new Map<string, ServerDevice>();
   state: FlipperServerState = 'pending';
-  android: AndroidDeviceManager;
-  ios: IOSDeviceManager;
+  stateError: string | undefined = undefined;
+  android?: AndroidDeviceManager;
+  ios?: IOSDeviceManager;
   keytarManager: KeytarManager;
   pluginManager: PluginManager;
+  unresponsiveClients: Set<string> = new Set();
 
   constructor(
     public config: FlipperServerConfig,
@@ -81,14 +89,15 @@ export class FlipperServerImpl implements FlipperServer {
     keytarModule?: KeytarModule,
   ) {
     setFlipperServerConfig(config);
+    console.log(
+      'Loaded flipper config, paths: ' + JSON.stringify(config.paths, null, 2),
+    );
     const server = (this.server = new ServerController(this));
-    this.android = new AndroidDeviceManager(this);
-    this.ios = new IOSDeviceManager(this);
     this.keytarManager = new KeytarManager(keytarModule);
     // given flipper-dump, it might make more sense to have the plugin command
     // handling (like download, install, etc) moved to flipper-server & app,
     // but let's keep things simple for now
-    this.pluginManager = new PluginManager();
+    this.pluginManager = new PluginManager(this);
 
     server.addListener('error', (err) => {
       this.emit('server-error', err);
@@ -119,25 +128,36 @@ export class FlipperServerImpl implements FlipperServer {
         medium: CertificateExchangeMedium;
         deviceID: string;
       }) => {
-        this.emit('notification', {
-          type: 'error',
-          title: `Timed out establishing connection with "${client.appName}" on "${client.deviceName}".`,
-          description:
-            medium === 'WWW'
-              ? `Verify that both your computer and mobile device are on Lighthouse/VPN that you are logged in to Facebook Intern so that certificates can be exhanged. See: https://fburl.com/flippervpn`
-              : 'Verify that your client is connected to Flipper and that there is no error related to idb or adb.',
-        });
+        const clientIdentifier = `${client.deviceName}#${client.appName}`;
+        if (!this.unresponsiveClients.has(clientIdentifier)) {
+          this.unresponsiveClients.add(clientIdentifier);
+          this.emit('notification', {
+            type: 'error',
+            title: `Timed out establishing connection with "${client.appName}" on "${client.deviceName}".`,
+            description:
+              medium === 'WWW'
+                ? `Verify that both your computer and mobile device are on Lighthouse/VPN that you are logged in to Facebook Intern so that certificates can be exhanged. See: https://fburl.com/flippervpn`
+                : 'Verify that your client is connected to Flipper and that there is no error related to idb or adb.',
+          });
+        } else {
+          console.warn(
+            `[conn] Client still unresponsive: "${client.appName}" on "${client.deviceName}"`,
+          );
+        }
       },
     );
   }
 
   setServerState(state: FlipperServerState, error?: Error) {
     this.state = state;
-    this.emit('server-state', {state, error});
+    this.stateError = '' + error;
+    this.emit('server-state', {state, error: this.stateError});
   }
 
   /**
-   * Starts listening to parts and watching for devices
+   * Starts listening to parts and watching for devices.
+   * Connect never throws directly, but communicates
+   * through server-state events
    */
   async connect() {
     if (this.state !== 'pending') {
@@ -151,15 +171,49 @@ export class FlipperServerImpl implements FlipperServer {
       await this.startDeviceListeners();
       this.setServerState('started');
     } catch (e) {
-      console.error('Failed to start FlipperServer', e);
+      if (!isHandledStartupError(e)) {
+        console.error('Failed to start FlipperServer', e);
+      }
       this.setServerState('error', e);
     }
   }
 
   async startDeviceListeners() {
+    const asyncDeviceListenersPromises: Array<Promise<void>> = [];
+    if (this.config.settings.enableAndroid) {
+      asyncDeviceListenersPromises.push(
+        initializeAdbClient(this.config.settings)
+          .then((adbClient) => {
+            if (!adbClient) {
+              return;
+            }
+            this.android = new AndroidDeviceManager(this, adbClient);
+            return this.android.watchAndroidDevices();
+          })
+          .catch((e) => {
+            console.error(
+              'FlipperServerImpl.startDeviceListeners.watchAndroidDevices -> unexpected error',
+              e,
+            );
+          }),
+      );
+    }
+    if (this.config.settings.enableIOS) {
+      this.ios = new IOSDeviceManager(this, this.config.settings);
+      asyncDeviceListenersPromises.push(
+        this.ios.watchIOSDevices().catch((e) => {
+          console.error(
+            'FlipperServerImpl.startDeviceListeners.watchIOSDevices -> unexpected error',
+            e,
+          );
+        }),
+      );
+    }
+    const asyncDeviceListeners = await Promise.all(
+      asyncDeviceListenersPromises,
+    );
     this.disposers.push(
-      await this.android.watchAndroidDevices(),
-      await this.ios.watchIOSDevices(),
+      ...asyncDeviceListeners,
       metroDevice(this),
       desktopDevice(this),
     );
@@ -222,6 +276,10 @@ export class FlipperServerImpl implements FlipperServer {
   }
 
   private commandHandler: FlipperServerCommands = {
+    'get-server-state': async () => ({
+      state: this.state,
+      error: this.stateError,
+    }),
     'node-api-exec': commandNodeApiExec,
     'node-api-fs-access': access,
     'node-api-fs-pathExists': async (path, mode) => {
@@ -285,10 +343,6 @@ export class FlipperServerImpl implements FlipperServer {
     'device-list': async () => {
       return Array.from(this.devices.values()).map((d) => d.info);
     },
-    'device-supports-screenshot': async (serial: string) =>
-      this.getDevice(serial).screenshotAvailable(),
-    'device-supports-screencapture': async (serial: string) =>
-      this.getDevice(serial).screenCaptureAvailable(),
     'device-take-screenshot': async (serial: string) =>
       Base64.fromUint8Array(await this.getDevice(serial).screenshot()),
     'device-start-screencapture': async (serial, destination) =>
@@ -331,12 +385,20 @@ export class FlipperServerImpl implements FlipperServer {
         },
       };
     },
-    'android-get-emulators': async () => this.android.getAndroidEmulators(),
+    'android-get-emulators': async () => {
+      assertNotNull(this.android);
+      return this.android.getAndroidEmulators();
+    },
     'android-launch-emulator': async (name, coldBoot) =>
       launchEmulator(this.config.settings.androidHome, name, coldBoot),
-    'ios-get-simulators': async (bootedOnly) =>
-      this.ios.getSimulators(bootedOnly),
-    'ios-launch-simulator': async (udid) => launchSimulator(udid),
+    'ios-get-simulators': async (bootedOnly) => {
+      assertNotNull(this.ios);
+      return this.ios.getSimulators(bootedOnly);
+    },
+    'ios-launch-simulator': async (udid) => {
+      assertNotNull(this.ios);
+      return this.ios.simctlBridge.launchSimulator(udid);
+    },
     'persist-settings': async (settings) => saveSettings(settings),
     'persist-launcher-settings': async (settings) =>
       saveLauncherSettings(settings),
@@ -360,6 +422,30 @@ export class FlipperServerImpl implements FlipperServer {
     'plugins-install-from-npm': (name) =>
       this.pluginManager.installPluginFromNpm(name),
     'plugin-source': (path) => this.pluginManager.loadSource(path),
+    'plugins-server-add-on-start': (pluginName, details, owner) =>
+      this.pluginManager.startServerAddOn(pluginName, details, owner),
+    // TODO: Figure out if it needs to be async
+    'plugins-server-add-on-stop': async (pluginName, owner) =>
+      this.pluginManager.stopServerAddOn(pluginName, owner),
+    'plugins-server-add-on-request-response': async (payload) => {
+      try {
+        const serverAddOn =
+          this.pluginManager.getServerAddOnForMessage(payload);
+        assertNotNull(serverAddOn);
+        return await serverAddOn.sendExpectResponse(payload);
+      } catch {
+        return {
+          length: 0,
+          error: {
+            message: `Server add-on for message '${JSON.stringify(
+              payload,
+            )} is no longer running.`,
+            name: 'SERVER_ADDON_STOPPED',
+            stacktrace: '',
+          },
+        };
+      }
+    },
     'doctor-get-healthchecks': getHealthChecks,
     'doctor-run-healthcheck': runHealthcheck,
     'open-file': openFile,
@@ -414,7 +500,8 @@ export class FlipperServerImpl implements FlipperServer {
   getDevice(serial: string): ServerDevice {
     const device = this.devices.get(serial);
     if (!device) {
-      throw new Error('No device with serial: ' + serial);
+      console.warn(`No device with serial ${serial}.`);
+      throw new Error('No device with matching serial.');
     }
     return device;
   }

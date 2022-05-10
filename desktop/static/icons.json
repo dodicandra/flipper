@@ -601,6 +601,9 @@
   "camcorder-live": [
     16
   ],
+  "plumbing": [
+    16
+  ],
   "app-facebook-circle": [
     16
   ],
@@ -611,6 +614,18 @@
     16
   ],
   "friends-engagement": [
+    16
+  ],
+  "app-cms": [
+    16
+  ],
+  "caution-triangle-outline": [
+    24
+  ],
+  "bird-flying": [
+    16
+  ],
+  "arrows-left-right": [
     16
   ]
 }

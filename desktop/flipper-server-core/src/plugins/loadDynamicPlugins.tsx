@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -45,6 +45,11 @@ export async function loadDynamicPlugins(): Promise<InstalledPluginDetails[]> {
       )
     ).map((p: any) => p.name) as string[],
   );
+  console.log(
+    `✅  Detected ${bundledPlugins.size} bundled plugins: ${Array.from(
+      bundledPlugins,
+    ).join(', ')}.`,
+  );
   const [installedPlugins, unfilteredSourcePlugins] = await Promise.all([
     process.env.FLIPPER_NO_PLUGIN_MARKETPLACE
       ? Promise.resolve([])
@@ -60,23 +65,23 @@ export async function loadDynamicPlugins(): Promise<InstalledPluginDetails[]> {
   const defaultPlugins = await getAllInstalledPluginsInDir(defaultPluginsDir);
   if (defaultPlugins.length > 0) {
     console.log(
-      `✅  Loaded ${defaultPlugins.length} default plugins: ${defaultPlugins
-        .map((x) => x.title)
-        .join(', ')}.`,
+      `✅  Loaded ${defaultPlugins.length} default plugins:\n${defaultPlugins
+        .map((x) => `${x.title}@${x.version}`)
+        .join('\n')}.`,
     );
   }
   if (installedPlugins.length > 0) {
     console.log(
-      `✅  Loaded ${installedPlugins.length} installed plugins: ${Array.from(
-        new Set(installedPlugins.map((x) => x.title)),
-      ).join(', ')}.`,
+      `✅  Loaded ${installedPlugins.length} installed plugins:\n${Array.from(
+        new Set(installedPlugins.map((x) => `${x.title}@${x.version}`)),
+      ).join('\n')}.`,
     );
   }
   if (sourcePlugins.length > 0) {
     console.log(
-      `✅  Loaded ${sourcePlugins.length} source plugins: ${sourcePlugins
-        .map((x) => x.title)
-        .join(', ')}.`,
+      `✅  Loaded ${sourcePlugins.length} source plugins:\n${sourcePlugins
+        .map((x) => `${x.title} - ${x.dir}`)
+        .join('\n')}.`,
     );
   }
   return [...defaultPlugins, ...installedPlugins, ...sourcePlugins];

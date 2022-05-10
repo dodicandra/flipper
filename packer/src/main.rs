@@ -1,5 +1,5 @@
 /*
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -14,9 +14,9 @@ mod tarsum;
 mod types;
 
 use anyhow::{bail, Context, Result};
-use clap::value_t_or_exit;
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 use std::collections::BTreeMap;
+use std::ffi;
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Write};
 use std::path;
@@ -26,11 +26,52 @@ const DEFAULT_PACKLIST: &str = include_str!("packlist.yaml");
 // This is to ensure that all progress bar prefixes are aligned.
 const PROGRESS_PREFIX_LEN: usize = 24;
 
+fn expand_tilde_path(path: &ffi::OsStr) -> Result<path::PathBuf> {
+    Ok(path::PathBuf::from(
+        shellexpand::tilde(
+            &path
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("Not a valid path: {:?}", path))?,
+        )
+        .to_string(),
+    ))
+}
+
+#[derive(clap::Parser, Debug)]
+#[clap(author, version, about)]
+struct Args {
+    /// Directory to write output files to.
+    #[clap(short, long, parse(from_os_str), default_value = ".")]
+    output: path::PathBuf,
+
+    /// Flipper dist directory to read from.
+    #[clap(
+        short,
+        long,
+        parse(try_from_os_str = expand_tilde_path),
+        default_value = "~/fbsource/xplat/sonar/dist"
+    )]
+    dist: path::PathBuf,
+
+    /// Custom list of files to pack.
+    #[clap(short, long, parse(from_os_str))]
+    packlist: Option<path::PathBuf>,
+
+    /// Skip compressing the archives (for debugging)
+    #[clap(long)]
+    no_compression: bool,
+
+    /// Platform to build for
+    #[clap(value_name = "PLATFORM")]
+    platform: Platform,
+}
+
 type PackListPlatform = BTreeMap<PackType, Vec<String>>;
 
 #[derive(Debug, serde::Deserialize)]
 struct PackListSpec {
     mode: PackMode,
+    basedir: path::PathBuf,
     files: PackListPlatform,
 }
 
@@ -61,13 +102,12 @@ fn default_progress_bar(len: u64) -> indicatif::ProgressBar {
 }
 
 fn pack(
-    platform: Platform,
+    platform: &Platform,
     dist_dir: &std::path::Path,
     pack_list: &PackList,
     output_directory: &std::path::Path,
 ) -> Result<Vec<(PackType, path::PathBuf)>> {
     let pb = default_progress_bar(pack_list.0.len() as u64 * 2 - 1);
-    let base_dir = platform_base_dir(dist_dir, platform);
     pb.set_prefix(&format!(
         "{:width$}",
         "Packing archives",
@@ -75,8 +115,9 @@ fn pack(
     ));
     let packlist_spec = pack_list
         .0
-        .get(&platform)
-        .ok_or(error::Error::MissingPlatformDefinition(platform))?;
+        .get(platform)
+        .ok_or_else(|| error::Error::MissingPlatformDefinition(platform.clone()))?;
+    let base_dir = path::Path::new(dist_dir).join(&packlist_spec.basedir);
     let files = &packlist_spec.files;
     let res = files
         .into_par_iter()
@@ -108,16 +149,8 @@ fn pack(
     res
 }
 
-fn platform_base_dir(dist_dir: &path::Path, platform: Platform) -> path::PathBuf {
-    match platform {
-        Platform::Mac => path::Path::new(dist_dir).join("mac"),
-        Platform::Linux => path::Path::new(dist_dir).join("linux-unpacked"),
-        Platform::Windows => path::Path::new(dist_dir).join("win-unpacked"),
-    }
-}
-
 fn pack_platform_glob(
-    platform: Platform,
+    platform: &Platform,
     base_dir: &path::Path,
     pack_files: &[String],
     pack_type: PackType,
@@ -145,7 +178,9 @@ fn pack_platform_glob(
         let full_path = path::Path::new(&base_dir).join(&path);
         if !full_path.exists() {
             bail!(error::Error::MissingPackFile(
-                platform, pack_type, full_path,
+                platform.clone(),
+                pack_type,
+                full_path,
             ));
         }
         if full_path.is_file() {
@@ -159,7 +194,7 @@ fn pack_platform_glob(
 }
 
 fn pack_platform_exact(
-    platform: Platform,
+    platform: &Platform,
     base_dir: &path::Path,
     pack_files: &[String],
     pack_type: PackType,
@@ -169,7 +204,9 @@ fn pack_platform_exact(
         let full_path = path::Path::new(&base_dir).join(f);
         if !full_path.exists() {
             bail!(error::Error::MissingPackFile(
-                platform, pack_type, full_path,
+                platform.clone(),
+                pack_type,
+                full_path,
             ));
         }
         if full_path.is_file() {
@@ -194,62 +231,26 @@ fn sha256_digest<R: io::Read>(mut reader: &mut R) -> Result<HashSum> {
 }
 
 fn main() -> Result<(), anyhow::Error> {
-    // Ensure to define all env vars used here in the BUCK env, too.
-    let args = clap::App::new(env!("CARGO_PKG_NAME"))
-        .version(env!("CARGO_PKG_VERSION"))
-        .author(env!("CARGO_PKG_AUTHORS"))
-        .about("Split the Flipper distribution into smaller, cacheable artifacts")
-        .arg(
-            clap::Arg::from_usage("-o, --output [DIRECTORY] 'Directory to write output files to.'")
-                .default_value("."),
-        )
-        .arg(
-            clap::Arg::from_usage("-d, --dist [DIRECTORY] 'Flipper dist directory to read from.'")
-                .default_value("~/fbsource/xplat/sonar/dist"),
-        )
-        .arg(clap::Arg::from_usage(
-            "-p, --packlist=packlist.yaml 'Custom list of files to pack.'",
-        ))
-        .arg(clap::Arg::from_usage(
-            "--no-compression 'Skip compressing the archives (for debugging)'",
-        ))
-        .arg(
-            clap::Arg::from_usage("[PLATFORM] 'Platform to build for'")
-                .case_insensitive(true)
-                .required(true)
-                .possible_values(&Platform::variants()),
-        )
-        .get_matches();
-
-    let platform = value_t_or_exit!(args.value_of("PLATFORM"), Platform);
-    let dist_dir = path::PathBuf::from(
-        shellexpand::tilde(args.value_of("dist").expect("argument has default")).to_string(),
-    );
-    let compress = !args.is_present("no-compression");
-    let pack_list_str = args.value_of("packlist").map_or_else(
+    use clap::Parser;
+    let args = Args::parse();
+    let pack_list_str = args.packlist.as_ref().map_or_else(
         || DEFAULT_PACKLIST.to_string(),
         |f| {
-            std::fs::read_to_string(f)
-                .unwrap_or_else(|e| panic!("Failed to open packfile {}: {}", f, e))
+            std::fs::read_to_string(&f)
+                .unwrap_or_else(|e| panic!("Failed to open packfile {:?}: {}", &f, e))
         },
     );
     let pack_list: PackList =
         serde_yaml::from_str(&pack_list_str).expect("Failed to deserialize YAML packlist.");
-    let output_directory =
-        &path::PathBuf::from(args.value_of("output").expect("argument has default"));
-    std::fs::create_dir_all(output_directory).with_context(|| {
-        format!(
-            "Failed to create output directory '{}'.",
-            output_directory.to_string_lossy()
-        )
-    })?;
-    let archive_paths = pack(platform, &dist_dir, &pack_list, output_directory)?;
-    let compressed_archive_paths = if compress {
-        Some(compress_paths(&archive_paths)?)
-    } else {
+    std::fs::create_dir_all(&args.output)
+        .with_context(|| format!("Failed to create output directory '{:?}'.", &args.output))?;
+    let archive_paths = pack(&args.platform, &args.dist, &pack_list, &args.output)?;
+    let compressed_archive_paths = if args.no_compression {
         None
+    } else {
+        Some(compress_paths(&archive_paths)?)
     };
-    manifest(&archive_paths, &compressed_archive_paths, output_directory)?;
+    manifest(&archive_paths, &compressed_archive_paths, &args.output)?;
 
     Ok(())
 }
@@ -392,7 +393,7 @@ mod test {
     fn test_included_packlist_parses() {
         let res: PackList =
             serde_yaml::from_str(DEFAULT_PACKLIST).expect("Default packlist doesn't deserialize");
-        assert_eq!(res.0.len(), 3);
+        assert_eq!(res.0.len(), 4);
     }
 
     #[test]
@@ -404,7 +405,7 @@ mod test {
         let tmp_dir = tempdir::TempDir::new("manifest_test")?;
 
         let archive_paths = &[(PackType::Core, artifact_path)];
-        let path = manifest(archive_paths, &None, &tmp_dir.path().to_path_buf())?;
+        let path = manifest(archive_paths, &None, tmp_dir.path())?;
 
         let manifest_content = std::fs::read_to_string(&path)?;
 

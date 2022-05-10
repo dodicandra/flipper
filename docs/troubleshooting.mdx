@@ -35,6 +35,10 @@ We hope that Flipper works well out of the box, but the software is a work in pr
 This is a long standing MacOS + Electron issue outside our control. In general restarting your computer fixes the problem.
 For a quick, temporarily work around start Flipper with hardware acceleration disabled. Please note that this will consume a lot of CPU: `FLIPPER_DISABLE_GPU=1 open -a Flipper`.
 
+### iOS Simulator fails to connect with error "Failed to find device..."
+
+Try executing `idb kill` and restarting Flipper. See [this comment](https://fb.workplace.com/groups/flippersupport/posts/1288502608297061/?comment_id=1290222721458383&reply_comment_id=1290374518109870) for details.
+
 ### iOS Simulator missing from devices dropdown
 
 * Check that `xcode-select -p` shows the same XCode version that you're using. If not, see xcode-select for how to select the correct version.
@@ -162,9 +166,13 @@ When using Flipper with React Native, two devices should show up:
 
 1. Make sure you are running a debug build. Flipper _only_ supports debug builds.
 1. If you are upgraded from RN < 0.62.2, make sure you've updated all the dependencies and build related files according to the upgrade helper. For example: https://react-native-community.github.io/upgrade-helper/?from=0.61.4&to=0.62.2
-1. If you upgraded, make sure you made a clean build: `cd android && ./gradlew clean`, `cd iOS && pod install --repo-update`
-1. For iOS, make sure it works on a simulator first
+1. If you upgraded, make sure you made a clean build: `cd android && ./gradlew clean`, `cd iOS && pod install --repo-update`.
+1. For iOS, make sure it works on a simulator first.
 1. (Unconfirmed) check the deployment info target in the XCode project settings. Target should be `iOS 9.0`.
+
+#### Q: I'm seeing "certificate verify failed, type = SSL error" in the logs
+
+Ensure that your device is set to the correct time and timezone for TLS verification to work.
 
 #### Q: I see my app, but I don't see the external plugins I've installed
 

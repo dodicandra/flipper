@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -33,7 +33,7 @@ export function usePluginInstanceMaybe():
 }
 
 export function usePlugin<
-  Factory extends PluginFactory<any, any> | DevicePluginFactory,
+  Factory extends PluginFactory<any, any, any, any> | DevicePluginFactory,
 >(plugin: Factory): ReturnType<Factory> {
   const pluginInstance = usePluginInstance();
   // In principle we don't *need* the plugin, but having it passed it makes sure the
