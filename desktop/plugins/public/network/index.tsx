@@ -648,6 +648,7 @@ const baseColumns: DataTableColumn<Request>[] = [
     key: 'requestTime',
     title: 'Request Time',
     width: 120,
+    visible: false,
   },
   {
     key: 'responseTime',
@@ -681,6 +682,7 @@ const baseColumns: DataTableColumn<Request>[] = [
     width: 100,
     formatters: formatBytes,
     align: 'right',
+    visible: false,
   },
   {
     key: 'duration',
@@ -688,6 +690,7 @@ const baseColumns: DataTableColumn<Request>[] = [
     width: 100,
     formatters: formatDuration,
     align: 'right',
+    visible: false,
   },
 ];
 
