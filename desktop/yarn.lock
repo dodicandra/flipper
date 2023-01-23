@@ -8568,10 +8568,18 @@ metro-resolver@0.66.2:
   dependencies:
     absolute-path "^0.0.0"
 
-metro-runtime@0.66.2, metro-runtime@^0.66.2:
+metro-runtime@0.66.2:
   version "0.66.2"
   resolved "https://registry.yarnpkg.com/metro-runtime/-/metro-runtime-0.66.2.tgz#3409ee957b949b6c7b72ef6ed2b9af9a4f4a910e"
   integrity sha512-vFhKBk2ot9FS4b+2v0OTa/guCF/QDAOJubY0CNg7PzCS5+w4y3IvZIcPX4SSS1t8pYEZBLvtdtTDarlDl81xmg==
+
+metro-runtime@^0.74.1:
+  version "0.74.1"
+  resolved "https://registry.yarnpkg.com/metro-runtime/-/metro-runtime-0.74.1.tgz#218a085b60a2d9292bacfcac40b2ee6275c7a4e2"
+  integrity sha512-6nUj5gcsT/xmL1rbYt6IbXEJycf/jcMC397MAanLqhVP4q35ZQ0OQhB9hKwulwuoNQr0hmo001znGaalnimgWQ==
+  dependencies:
+    "@babel/runtime" "^7.0.0"
+    react-refresh "^0.4.0"
 
 metro-source-map@0.66.2:
   version "0.66.2"
